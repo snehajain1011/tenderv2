@@ -151,6 +151,18 @@ The deterministic rule engine still makes final verdicts. LLM output cannot sile
 - Audit logs record ingestion checkpoints, chunking/indexing checks, RAG retrieval checks, grounded extraction checks, rule evaluation, and the final accuracy gate.
 - Round 1 runs on public/representative data only; real bid data is not required.
 
+## Edge-Case Handling
+
+The backend records typed diagnostics for difficult procurement documents:
+
+- scanned PDFs with no embedded text are rendered page-by-page and passed through OCR
+- photographs/images use RapidOCR first, with optional Tesseract fallback
+- each parsed document stores `document_quality_json` with OCR confidence, text density, resolution, empty pages, table hints, and quality flags
+- missing evidence, ambiguous values, conflicting evidence, unsupported formats, and low OCR confidence are separated into explicit issue types
+- criteria can carry `criteria_risk_flags` for vague thresholds, missing time periods, subjective clauses, unverifiable claims, corrigendum sensitivity, and ambiguous tender language
+- review tasks include issue type, source, extracted value if any, confidence, reason, and suggested officer action
+- reports show issue type and suggested action for every `FAIL` or `NEED_MANUAL_REVIEW` verdict
+
 ## Workspace Layout
 
 ```text

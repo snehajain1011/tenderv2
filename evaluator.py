@@ -21,6 +21,10 @@ from schema import (
 
 
 MIN_CONFIDENCE = 0.65
+ACTION_LOW_CONFIDENCE = "Open the cited page/image, verify the extracted value manually, and request a clearer copy if unreadable."
+ACTION_MISSING = "Ask the bidder to identify the required document/value or mark the submission incomplete after officer review."
+ACTION_AMBIGUOUS = "Escalate to the procurement officer/technical committee because the value or clause cannot be safely interpreted automatically."
+ACTION_CONFLICT = "Compare the cited documents manually and record the accepted value before finalizing eligibility."
 
 
 def agent_catalog() -> list[AgentDefinition]:
@@ -98,7 +102,18 @@ def extract_evidence(
         for item in evidence:
             audit.append(validate_grounded_value(item.value, item.bidder_citation, f"{bidder}:{item.criterion_id}"))
             if item.confidence < MIN_CONFIDENCE and item.document and item.value.strip():
-                reviews.append(_review_task(bidder, item.criterion_id, "Low evidence confidence or OCR uncertainty.", item.bidder_citation))
+                reviews.append(
+                    _review_task(
+                        bidder,
+                        item.criterion_id,
+                        "Low evidence confidence or OCR uncertainty.",
+                        item.bidder_citation,
+                        "LOW_OCR_CONFIDENCE",
+                        item.value,
+                        item.confidence,
+                        ACTION_LOW_CONFIDENCE,
+                    )
+                )
 
     return evidence_by_bidder, audit, reviews
 
@@ -132,12 +147,23 @@ def evaluate_bidders(
                 )
             )
             if verdict.status == "NEED_MANUAL_REVIEW":
-                review_tasks.append(_review_task(bidder, criterion.id, verdict.manual_review_reason, verdict.bidder_source))
+                review_tasks.append(
+                    _review_task(
+                        bidder,
+                        criterion.id,
+                        verdict.manual_review_reason,
+                        verdict.bidder_source,
+                        verdict.uncertainty_type or "VALUE_NOT_FOUND",
+                        verdict.extracted_value,
+                        verdict.confidence,
+                        verdict.suggested_action,
+                    )
+                )
 
         conflicts = _find_conflicts(evidence_items)
         for criterion_id, reason, source in conflicts:
             audit.append(AuditEvent("contradiction_checkpoint", f"{bidder}:{criterion_id}", {"passed": False, "reason": reason}))
-            review_tasks.append(_review_task(bidder, criterion_id, reason, source))
+            review_tasks.append(_review_task(bidder, criterion_id, reason, source, "CONFLICTING_EVIDENCE", "", 0.0, ACTION_CONFLICT))
             verdicts = [_force_review(verdict, reason) if verdict.criterion_id == criterion_id else verdict for verdict in verdicts]
 
         review_tasks = _dedupe_review_tasks(review_tasks)
@@ -173,6 +199,10 @@ def final_accuracy_gate(result: EvaluationResult) -> list[str]:
                 issues.append(f"{bidder.bidder}:{verdict.criterion_id}: rejection lacks rule trace")
             if verdict.status == "NEED_MANUAL_REVIEW" and not verdict.manual_review_reason:
                 issues.append(f"{bidder.bidder}:{verdict.criterion_id}: review lacks reason")
+            if verdict.status in {"FAIL", "NEED_MANUAL_REVIEW"} and not verdict.uncertainty_type:
+                issues.append(f"{bidder.bidder}:{verdict.criterion_id}: non-pass verdict lacks issue type")
+            if verdict.status in {"FAIL", "NEED_MANUAL_REVIEW"} and not verdict.suggested_action:
+                issues.append(f"{bidder.bidder}:{verdict.criterion_id}: non-pass verdict lacks suggested action")
     return issues
 
 
@@ -196,6 +226,7 @@ def _criteria_from_llm(data: object | None, tender_index) -> list[Criterion]:
                 time_period=str(item.get("time_period", "")),
                 comparison_rule=str(item.get("comparison_rule", "present")),
                 accepted_evidence=list(item.get("accepted_evidence", [])),
+                criteria_risk_flags=list(item.get("criteria_risk_flags", [])) or _criteria_risk_flags(description, str(item.get("threshold", "")), str(item.get("time_period", ""))),
             )
         )
     return [criterion for criterion in criteria if criterion.description]
@@ -226,13 +257,14 @@ def _heuristic_criteria(text: str, tender_index) -> list[Criterion]:
                 "last 3 financial years",
                 "minimum",
                 ["CA certificate", "audited balance sheet", "turnover certificate"],
+                _criteria_risk_flags("Average annual turnover must meet the tender threshold.", threshold, "last 3 financial years"),
             )
         )
 
     if "gst" in lower:
-        criteria.append(Criterion("C2", "compliance", True, "Bidder must have valid GST registration.", _best_tender_citation(tender_index, "GST registration valid"), comparison_rule="valid", accepted_evidence=["GST registration certificate"]))
+        criteria.append(Criterion("C2", "compliance", True, "Bidder must have valid GST registration.", _best_tender_citation(tender_index, "GST registration valid"), comparison_rule="valid", accepted_evidence=["GST registration certificate"], criteria_risk_flags=_criteria_risk_flags("Bidder must have valid GST registration.", "", "")))
     if re.search(r"(?:bidder|contractor|tenderer)\s+(?:must|shall|should|required).{0,80}iso|iso\s+9001\s+certificat(?:e|ion)\s+(?:must|shall|should|required)", lower):
-        criteria.append(Criterion("C3", "compliance", True, "Bidder must hold valid ISO 9001 certification.", _best_tender_citation(tender_index, "ISO 9001 certification"), comparison_rule="valid", accepted_evidence=["ISO 9001 certificate"]))
+        criteria.append(Criterion("C3", "compliance", True, "Bidder must hold valid ISO 9001 certification.", _best_tender_citation(tender_index, "ISO 9001 certification"), comparison_rule="valid", accepted_evidence=["ISO 9001 certificate"], criteria_risk_flags=_criteria_risk_flags("Bidder must hold valid ISO 9001 certification.", "", "")))
     if "similar" in lower or "experience" in lower or "projects" in lower:
         if estimated_cost and ("40%" in text or "forty percent" in lower or "estimated cost put to tender" in lower):
             technical_threshold = "3 works >= 40% estimated cost OR 2 works >= 60% OR 1 work >= 80%"
@@ -241,16 +273,16 @@ def _heuristic_criteria(text: str, tender_index) -> list[Criterion]:
                 f"2 works >= {_format_inr(estimated_cost * 0.6)} OR "
                 f"1 work >= {_format_inr(estimated_cost * 0.8)}"
             )
-            criteria.append(Criterion("C4", "technical", True, "Bidder must satisfy similar completed work value criteria.", _best_tender_citation(tender_index, "similar works completed estimated cost"), technical_threshold, "last 7 years", "similar_work_value_combo", ["work orders", "completion certificates", "experience letters"]))
+            criteria.append(Criterion("C4", "technical", True, "Bidder must satisfy similar completed work value criteria.", _best_tender_citation(tender_index, "similar works completed estimated cost"), technical_threshold, "last 7 years", "similar_work_value_combo", ["work orders", "completion certificates", "experience letters"], _criteria_risk_flags("Bidder must satisfy similar completed work value criteria.", technical_threshold, "last 7 years")))
         else:
-            criteria.append(Criterion("C4", "technical", True, "Bidder must show at least 3 similar completed projects.", _best_tender_citation(tender_index, "similar projects completed"), "3 projects", "last 5 years", "count_at_least", ["work orders", "completion certificates", "experience letters"]))
+            criteria.append(Criterion("C4", "technical", True, "Bidder must show at least 3 similar completed projects.", _best_tender_citation(tender_index, "similar projects completed"), "3 projects", "last 5 years", "count_at_least", ["work orders", "completion certificates", "experience letters"], _criteria_risk_flags("Bidder must show at least 3 similar completed projects.", "3 projects", "last 5 years")))
     if "industrial license" in lower:
-        criteria.append(Criterion("C5", "compliance", True, "Bidder must provide applicable industrial license.", _best_tender_citation(tender_index, "industrial license manufacturing"), comparison_rule="present", accepted_evidence=["industrial license"]))
+        criteria.append(Criterion("C5", "compliance", True, "Bidder must provide applicable industrial license.", _best_tender_citation(tender_index, "industrial license manufacturing"), comparison_rule="present", accepted_evidence=["industrial license"], criteria_risk_flags=_criteria_risk_flags("Bidder must provide applicable industrial license.", "", "")))
     emd_value = _emd_value(text)
     if "earnest money" in lower or re.search(r"\bemd\b", lower):
-        criteria.append(Criterion("C6", "document", True, "Bidder must submit Earnest Money Deposit or valid exemption proof.", _best_tender_citation(tender_index, "Earnest Money Deposit EMD"), emd_value, "", "emd_present", ["EMD receipt", "bank guarantee", "FDR", "exemption proof"]))
+        criteria.append(Criterion("C6", "document", True, "Bidder must submit Earnest Money Deposit or valid exemption proof.", _best_tender_citation(tender_index, "Earnest Money Deposit EMD"), emd_value, "", "emd_present", ["EMD receipt", "bank guarantee", "FDR", "exemption proof"], _criteria_risk_flags("Bidder must submit Earnest Money Deposit or valid exemption proof.", emd_value, "")))
     if "price bid" in lower or "quoted" in lower or "percentage rate" in lower:
-        criteria.append(Criterion("C7", "commercial", False, "Quoted financial bid amount must be extracted for L1 comparison.", _best_tender_citation(tender_index, "price bid quoted amount percentage rate"), "", "", "price_extracted", ["price bid", "BOQ", "quoted percentage", "tendered amount"]))
+        criteria.append(Criterion("C7", "commercial", False, "Quoted financial bid amount must be extracted for L1 comparison.", _best_tender_citation(tender_index, "price bid quoted amount percentage rate"), "", "", "price_extracted", ["price bid", "BOQ", "quoted percentage", "tendered amount"], _criteria_risk_flags("Quoted financial bid amount must be extracted for L1 comparison.", "", "")))
     if not criteria:
         criteria.append(
             Criterion(
@@ -261,6 +293,7 @@ def _heuristic_criteria(text: str, tender_index) -> list[Criterion]:
                 _best_tender_citation(tender_index, "eligibility criteria qualification terms conditions"),
                 comparison_rule="review_only",
                 accepted_evidence=["manual procurement officer review"],
+                criteria_risk_flags=["AMBIGUOUS_TENDER_LANGUAGE"],
             )
         )
     return criteria
@@ -278,7 +311,17 @@ def _evidence_from_hits(bidder: str, criterion: Criterion, hits) -> Evidence:
     audit_event = validate_retrieval(hits, f"{bidder}:{criterion.id}")
     if not audit_event.detail["passed"]:
         empty = Citation("", 0, "Missing evidence", "No source chunk retrieved.")
-        return Evidence(criterion.id, bidder, "", "", empty, criterion.tender_citation, 0.0, notes="Retrieval confidence below threshold.")
+        return Evidence(
+            criterion.id,
+            bidder,
+            "",
+            "",
+            empty,
+            criterion.tender_citation,
+            0.0,
+            notes="Retrieval confidence below threshold.",
+            uncertainty_type="MISSING_REQUIRED_DOCUMENT" if criterion.mandatory else "VALUE_NOT_FOUND",
+        )
 
     hit = hits[0]
     citation = citation_from_hit(hit, criterion.description)
@@ -297,6 +340,8 @@ def _evidence_from_hits(bidder: str, criterion: Criterion, hits) -> Evidence:
         confidence=confidence,
         normalized_value=value,
         notes="" if value else "Evidence retrieved but value could not be extracted.",
+        uncertainty_type="" if value else "VALUE_NOT_FOUND",
+        candidate_snippets=[citation_from_hit(item, criterion.description) for item in hits[:3]],
     )
 
 
@@ -327,7 +372,9 @@ def _full_document_evidence(bidder: str, criterion: Criterion, docs: list[Docume
         value, citation = _text_marker_evidence(full_text, docs, "industrial license", "Industrial license present")
 
     if value and citation:
-        return Evidence(criterion.id, bidder, citation.document, value, citation, criterion.tender_citation, 0.9, value, notes)
+        uncertainty = "AMBIGUOUS_VALUE" if "ambiguous" in value.lower() else ""
+        confidence = 0.55 if uncertainty else 0.9
+        return Evidence(criterion.id, bidder, citation.document, value, citation, criterion.tender_citation, confidence, value, notes, uncertainty)
     return _evidence_from_hits(bidder, criterion, hits)
 
 
@@ -356,6 +403,7 @@ def _evidence_from_llm(bidder: str, criteria: list[Criterion], data: object | No
                 float(item.get("confidence", 0) or 0),
                 str(item.get("normalized_value", "")),
                 str(item.get("notes", "")),
+                str(item.get("uncertainty_type", "")),
             )
         )
     return evidence
@@ -377,6 +425,9 @@ def _evaluate_criterion(criterion: Criterion, evidence_items: list[Evidence], l1
             confidence,
             "review_only",
             "Criteria extraction was not confident enough for automated evaluation.",
+            "",
+            "AMBIGUOUS_TENDER_LANGUAGE",
+            ACTION_AMBIGUOUS,
         )
 
     usable = [item for item in evidence_items if item.value.strip()]
@@ -393,46 +444,52 @@ def _evaluate_criterion(criterion: Criterion, evidence_items: list[Evidence], l1
             0.0,
             "missing_evidence",
             "Required document or value missing, or retrieval confidence below threshold.",
+            "",
+            evidence_items[0].uncertainty_type if evidence_items and evidence_items[0].uncertainty_type else ("MISSING_REQUIRED_DOCUMENT" if criterion.mandatory else "VALUE_NOT_FOUND"),
+            ACTION_MISSING,
         )
 
     best = max(usable, key=lambda item: item.confidence)
     if best.confidence < MIN_CONFIDENCE:
-        return Verdict(criterion.id, criterion.description, "NEED_MANUAL_REVIEW", "Evidence was found but confidence is below threshold.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, "confidence_check", "Low OCR, parsing, or retrieval confidence.")
+        return Verdict(criterion.id, criterion.description, "NEED_MANUAL_REVIEW", "Evidence was found but confidence is below threshold.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, "confidence_check", "Low OCR, parsing, or retrieval confidence.", "", "LOW_OCR_CONFIDENCE", ACTION_LOW_CONFIDENCE)
+
+    if criterion.criteria_risk_flags and best.uncertainty_type:
+        return Verdict(criterion.id, criterion.description, "NEED_MANUAL_REVIEW", "Tender criterion has risk flags and extracted evidence is uncertain.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, f"criteria_risk_flags={','.join(criterion.criteria_risk_flags)}; evidence_uncertainty={best.uncertainty_type}", "Ambiguous tender language or uncertain evidence requires officer interpretation.", "", "AMBIGUOUS_TENDER_LANGUAGE", ACTION_AMBIGUOUS)
 
     if criterion.comparison_rule == "minimum":
         found = _money_to_crore(best.value)
         required = _money_to_crore(criterion.threshold)
         trace = f"found={best.value}; required={criterion.threshold}; comparison=found >= required; source={best.document}"
         if found is None or required is None:
-            return Verdict(criterion.id, criterion.description, "NEED_MANUAL_REVIEW", "Financial value could not be normalized.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace, "Ambiguous financial value.")
+            return Verdict(criterion.id, criterion.description, "NEED_MANUAL_REVIEW", "Financial value could not be normalized.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace, "Ambiguous financial value.", "", "AMBIGUOUS_VALUE", ACTION_AMBIGUOUS)
         if found >= required:
             return Verdict(criterion.id, criterion.description, "PASS", f"Found {best.value}, meeting required {criterion.threshold}.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace)
-        return Verdict(criterion.id, criterion.description, "FAIL", f"Found {best.value}, below required {criterion.threshold}.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace)
+        return Verdict(criterion.id, criterion.description, "FAIL", f"Found {best.value}, below required {criterion.threshold}.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace, "", "", "RULE_FAILURE", "Record the source-backed threshold failure in the rejection note after officer sign-off.")
 
     if criterion.comparison_rule == "similar_work_value_combo":
         values = _all_money_to_rupees(best.value)
         trace = f"found={best.value}; required={criterion.threshold}; comparison=3x40% OR 2x60% OR 1x80%; source={best.document}"
         required_values = _all_money_to_rupees(criterion.threshold)
         if len(required_values) < 3 or not values:
-            return Verdict(criterion.id, criterion.description, "NEED_MANUAL_REVIEW", "Similar-work values could not be normalized.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace, "Ambiguous project value evidence.")
+            return Verdict(criterion.id, criterion.description, "NEED_MANUAL_REVIEW", "Similar-work values could not be normalized.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace, "Ambiguous project value evidence.", "", "AMBIGUOUS_VALUE", ACTION_AMBIGUOUS)
         r40, r60, r80 = required_values[0], required_values[1], required_values[2]
         pass_combo = sum(1 for value in values if value >= r40) >= 3 or sum(1 for value in values if value >= r60) >= 2 or any(value >= r80 for value in values)
         if pass_combo:
             return Verdict(criterion.id, criterion.description, "PASS", "Similar completed work values satisfy the tender combination rule.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace)
-        return Verdict(criterion.id, criterion.description, "FAIL", "Similar completed work values do not satisfy 3x40%, 2x60%, or 1x80% of estimated cost.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace)
+        return Verdict(criterion.id, criterion.description, "FAIL", "Similar completed work values do not satisfy 3x40%, 2x60%, or 1x80% of estimated cost.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace, "", "", "RULE_FAILURE", "Record the cited similar-work shortfall in the technical evaluation note after officer sign-off.")
 
     if criterion.comparison_rule == "emd_present":
         trace = f"found={best.value}; required={criterion.threshold or 'EMD/exemption proof'}; source={best.document}"
         lower_value = best.value.lower()
         if any(term in lower_value for term in ["missing", "not enclosed", "pending", "not attached"]):
-            return Verdict(criterion.id, criterion.description, "FAIL", "EMD evidence indicates proof is missing or pending.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace)
+            return Verdict(criterion.id, criterion.description, "FAIL", "EMD evidence indicates proof is missing or pending.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace, "", "", "MISSING_REQUIRED_DOCUMENT", "Verify the EMD/exemption proof manually before recording the non-responsive reason.")
         return Verdict(criterion.id, criterion.description, "PASS", "EMD or tender fee evidence is present with acceptable confidence.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace)
 
     if criterion.comparison_rule == "price_extracted":
         price = _money_to_rupees(best.value)
         trace = f"found={best.value}; l1={_format_inr(l1_price) if l1_price else 'unknown'}; source={best.document}"
         if price is None:
-            return Verdict(criterion.id, criterion.description, "NEED_MANUAL_REVIEW", "Quoted price could not be normalized.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace, "Ambiguous price bid evidence.")
+            return Verdict(criterion.id, criterion.description, "NEED_MANUAL_REVIEW", "Quoted price could not be normalized.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace, "Ambiguous price bid evidence.", "", "AMBIGUOUS_VALUE", ACTION_AMBIGUOUS)
         if l1_price is not None and abs(price - l1_price) < 1:
             return Verdict(criterion.id, criterion.description, "PASS", f"Quoted price extracted and currently L1 at {_format_inr(price)}.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace)
         return Verdict(criterion.id, criterion.description, "PASS", f"Quoted price extracted for comparison; L1 is {_format_inr(l1_price) if l1_price else 'not determined'}.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace)
@@ -442,14 +499,14 @@ def _evaluate_criterion(criterion: Criterion, evidence_items: list[Evidence], l1
         required_count = _first_number(criterion.threshold) or 1
         trace = f"found={best.value}; required={criterion.threshold}; comparison=found_count >= required_count; source={best.document}"
         if found_count is None:
-            return Verdict(criterion.id, criterion.description, "NEED_MANUAL_REVIEW", "Project count could not be verified.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace, "Ambiguous project experience evidence.")
+            return Verdict(criterion.id, criterion.description, "NEED_MANUAL_REVIEW", "Project count could not be verified.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace, "Ambiguous project experience evidence.", "", "AMBIGUOUS_VALUE", ACTION_AMBIGUOUS)
         if found_count >= required_count:
             return Verdict(criterion.id, criterion.description, "PASS", f"Found {found_count} matching projects, meeting required {required_count}.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace)
-        return Verdict(criterion.id, criterion.description, "FAIL", f"Found {found_count} matching projects, below required {required_count}.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace)
+        return Verdict(criterion.id, criterion.description, "FAIL", f"Found {found_count} matching projects, below required {required_count}.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace, "", "", "RULE_FAILURE", "Record the cited experience shortfall in the technical evaluation note after officer sign-off.")
 
     trace = f"found={best.value}; required=present/valid; source={best.document}"
     if any(word in best.value.lower() for word in ["expired", "invalid", "not available"]):
-        return Verdict(criterion.id, criterion.description, "FAIL", "Evidence indicates the required document or registration is invalid.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace)
+        return Verdict(criterion.id, criterion.description, "FAIL", "Evidence indicates the required document or registration is invalid.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace, "", "", "RULE_FAILURE", "Verify the cited invalid/expired document before recording the rejection reason.")
     return Verdict(criterion.id, criterion.description, "PASS", "Required evidence is present with acceptable confidence.", criterion.tender_citation, best.bidder_citation, best.value, best.confidence, trace)
 
 
@@ -521,11 +578,20 @@ def _l1_prices(criteria: list[Criterion], evidence_by_bidder: dict[str, list[Evi
 
 
 def _force_review(verdict: Verdict, reason: str) -> Verdict:
-    return Verdict(verdict.criterion_id, verdict.criterion, "NEED_MANUAL_REVIEW", reason, verdict.tender_source, verdict.bidder_source, verdict.extracted_value, verdict.confidence, verdict.rule_trace, reason)
+    return Verdict(verdict.criterion_id, verdict.criterion, "NEED_MANUAL_REVIEW", reason, verdict.tender_source, verdict.bidder_source, verdict.extracted_value, verdict.confidence, verdict.rule_trace, reason, verdict.human_reviewer_action, "CONFLICTING_EVIDENCE", ACTION_CONFLICT)
 
 
-def _review_task(bidder: str, criterion_id: str, reason: str, source: Citation) -> ReviewTask:
-    return ReviewTask(f"REV-{bidder}-{criterion_id}".replace(" ", "-"), bidder, criterion_id, reason, "high", source)
+def _review_task(
+    bidder: str,
+    criterion_id: str,
+    reason: str,
+    source: Citation,
+    issue_type: str = "VALUE_NOT_FOUND",
+    extracted_value: str = "",
+    confidence: float = 0.0,
+    suggested_action: str = ACTION_MISSING,
+) -> ReviewTask:
+    return ReviewTask(f"REV-{bidder}-{criterion_id}".replace(" ", "-"), bidder, criterion_id, reason, "high", source, issue_type, extracted_value, confidence, suggested_action)
 
 
 def _dedupe_review_tasks(tasks: list[ReviewTask]) -> list[ReviewTask]:
@@ -535,7 +601,7 @@ def _dedupe_review_tasks(tasks: list[ReviewTask]) -> list[ReviewTask]:
         normalized_reason = task.reason
         if normalized_reason == "Low OCR, parsing, or retrieval confidence.":
             normalized_reason = "Low evidence confidence or OCR uncertainty."
-        key = (task.bidder, task.criterion_id, normalized_reason)
+        key = (task.bidder, task.criterion_id, normalized_reason, task.issue_type)
         if key in seen:
             continue
         seen.add(key)
@@ -546,6 +612,22 @@ def _dedupe_review_tasks(tasks: list[ReviewTask]) -> list[ReviewTask]:
 def _category(value: object) -> str:
     text = str(value)
     return text if text in {"financial", "technical", "compliance", "document", "commercial"} else "document"
+
+
+def _criteria_risk_flags(description: str, threshold: str, time_period: str) -> list[str]:
+    text = f"{description} {threshold} {time_period}".lower()
+    flags: list[str] = []
+    if any(term in text for term in ["satisfactory", "adequate", "as deemed fit", "reputed", "similar nature"]):
+        flags.append("subjective_requirement")
+    if any(term in text for term in ["similar", "experience", "project"]) and "similar works" not in text and "construction" not in text:
+        flags.append("unverifiable_claim")
+    if not threshold and any(term in text for term in ["minimum", "at least", "turnover", "emd", "price"]):
+        flags.append("vague_threshold")
+    if not time_period and any(term in text for term in ["valid", "turnover", "experience", "completed"]):
+        flags.append("missing_time_period")
+    if "corrigendum" in text or "amended" in text:
+        flags.append("corrigendum_sensitive")
+    return sorted(set(flags))
 
 
 def _first_money_value(text: str) -> str:

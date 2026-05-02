@@ -116,6 +116,7 @@ def _chunk(doc: Document, text: str, start: int, end: int, index: int) -> RagChu
         section=first_line,
         start=start,
         end=end,
+        quality_flags=doc.quality.quality_flags,
     )
 
 

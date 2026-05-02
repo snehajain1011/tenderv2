@@ -78,7 +78,7 @@ class ProcurementRepository:
                 self._insert_verdict(criterion_pk, submission_pk, evidence_map.get((bidder_result.bidder, verdict.criterion_id)), verdict)
             for task in bidder_result.review_tasks:
                 criterion_pk = criterion_map.get(task.criterion_id)
-                self._insert_review_task(tender_pk, submission_pk, criterion_pk, task.reason, task.priority, task.source.document)
+                self._insert_review_task(tender_pk, submission_pk, criterion_pk, task)
 
         self._insert_award(tender_pk, submission_map, result)
         self._insert_agent_outputs(tender_pk, result, audit_events)
@@ -124,7 +124,30 @@ class ProcurementRepository:
         with self.conn.cursor() if self.is_postgres else self.conn:
             for statement in statements:
                 self._execute(statement)
+            self._ensure_columns()
         self.conn.commit()
+
+    def _ensure_columns(self) -> None:
+        self._add_column("tender_documents", "document_quality_json", "TEXT NOT NULL DEFAULT '{}'")
+        self._add_column("bid_documents", "document_quality_json", "TEXT NOT NULL DEFAULT '{}'")
+        self._add_column("document_chunks", "quality_flags_json", "TEXT NOT NULL DEFAULT '[]'")
+        self._add_column("criteria", "criteria_risk_flags_json", "TEXT NOT NULL DEFAULT '[]'")
+        self._add_column("evidence", "uncertainty_type", "TEXT NOT NULL DEFAULT ''")
+        self._add_column("evidence", "candidate_snippets_json", "TEXT NOT NULL DEFAULT '[]'")
+        self._add_column("verdicts", "uncertainty_type", "TEXT NOT NULL DEFAULT ''")
+        self._add_column("verdicts", "suggested_action", "TEXT NOT NULL DEFAULT ''")
+        self._add_column("review_tasks", "issue_type", "TEXT NOT NULL DEFAULT ''")
+        self._add_column("review_tasks", "extracted_value", "TEXT NOT NULL DEFAULT ''")
+        self._add_column("review_tasks", "confidence", "DOUBLE PRECISION NOT NULL DEFAULT 0" if self.is_postgres else "REAL NOT NULL DEFAULT 0")
+        self._add_column("review_tasks", "suggested_action", "TEXT NOT NULL DEFAULT ''")
+
+    def _add_column(self, table: str, column: str, definition: str) -> None:
+        if self.is_postgres:
+            self._execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}")
+            return
+        existing = {row[1] for row in self.conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in existing:
+            self._execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def _delete_run_children(self, tender_pk: str) -> None:
         for table in [
@@ -196,26 +219,26 @@ class ProcurementRepository:
         doc_pk = _id()
         if table == "tender_documents":
             self._execute(
-                "INSERT INTO tender_documents (id, tender_id, filename, storage_uri, checksum_sha256, parser, parse_confidence, page_count, parsed_text, source_type) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
-                [doc_pk, tender_pk, doc.name, doc.path, doc.checksum_sha256, doc.parser, doc.confidence, doc.page_count, doc.text, doc.source_type],
+                "INSERT INTO tender_documents (id, tender_id, filename, storage_uri, checksum_sha256, parser, parse_confidence, page_count, parsed_text, source_type, document_quality_json) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
+                [doc_pk, tender_pk, doc.name, doc.path, doc.checksum_sha256, doc.parser, doc.confidence, doc.page_count, doc.text, doc.source_type, _json(to_dict(doc.quality))],
             )
         else:
             self._execute(
-                "INSERT INTO bid_documents (id, tender_id, submission_id, filename, storage_uri, checksum_sha256, parser, parse_confidence, page_count, parsed_text, source_type) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
-                [doc_pk, tender_pk, submission_pk, doc.name, doc.path, doc.checksum_sha256, doc.parser, doc.confidence, doc.page_count, doc.text, doc.source_type],
+                "INSERT INTO bid_documents (id, tender_id, submission_id, filename, storage_uri, checksum_sha256, parser, parse_confidence, page_count, parsed_text, source_type, document_quality_json) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
+                [doc_pk, tender_pk, submission_pk, doc.name, doc.path, doc.checksum_sha256, doc.parser, doc.confidence, doc.page_count, doc.text, doc.source_type, _json(to_dict(doc.quality))],
             )
         return doc_pk
 
     def _insert_chunk(self, tender_pk: str, doc_pk: str | None, kind: str, chunk: RagChunk, submission_pk: str | None = None) -> None:
         self._execute(
-            "INSERT INTO document_chunks (id, tender_id, document_id, submission_id, document_kind, source_file, page, section, start_offset, end_offset, chunk_text) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
-            [_id(), tender_pk, doc_pk, submission_pk, kind, chunk.document_name, chunk.page, chunk.section, chunk.start, chunk.end, chunk.text],
+            "INSERT INTO document_chunks (id, tender_id, document_id, submission_id, document_kind, source_file, page, section, start_offset, end_offset, chunk_text, quality_flags_json) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
+            [_id(), tender_pk, doc_pk, submission_pk, kind, chunk.document_name, chunk.page, chunk.section, chunk.start, chunk.end, chunk.text, _json(chunk.quality_flags)],
         )
 
     def _insert_criterion(self, tender_pk: str, criterion: Criterion) -> str:
         criterion_pk = _id()
         self._execute(
-            "INSERT INTO criteria (id, tender_id, criterion_code, category, mandatory, description, rule_type, threshold, time_period, accepted_evidence_json, source_file, source_page, source_excerpt, source_section, source_chunk_id, version) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
+            "INSERT INTO criteria (id, tender_id, criterion_code, category, mandatory, description, rule_type, threshold, time_period, accepted_evidence_json, source_file, source_page, source_excerpt, source_section, source_chunk_id, version, criteria_risk_flags_json) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
             [
                 criterion_pk,
                 tender_pk,
@@ -233,6 +256,7 @@ class ProcurementRepository:
                 criterion.tender_citation.section,
                 criterion.tender_citation.chunk_id,
                 1,
+                _json(criterion.criteria_risk_flags),
             ],
         )
         return criterion_pk
@@ -240,7 +264,7 @@ class ProcurementRepository:
     def _insert_evidence(self, criterion_pk: str, submission_pk: str, evidence: Evidence) -> str:
         evidence_pk = _id()
         self._execute(
-            "INSERT INTO evidence (id, criterion_id, submission_id, source_file, source_page, source_section, source_chunk_id, extracted_value, normalized_value, confidence, source_excerpt, notes) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
+            "INSERT INTO evidence (id, criterion_id, submission_id, source_file, source_page, source_section, source_chunk_id, extracted_value, normalized_value, confidence, source_excerpt, notes, uncertainty_type, candidate_snippets_json) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
             [
                 evidence_pk,
                 criterion_pk,
@@ -254,6 +278,8 @@ class ProcurementRepository:
                 evidence.confidence,
                 evidence.bidder_citation.excerpt,
                 evidence.notes,
+                evidence.uncertainty_type,
+                _json(to_dict(evidence.candidate_snippets)),
             ],
         )
         return evidence_pk
@@ -266,7 +292,7 @@ class ProcurementRepository:
 
     def _insert_verdict(self, criterion_pk: str, submission_pk: str, evidence_pk: str | None, verdict) -> None:
         self._execute(
-            "INSERT INTO verdicts (id, criterion_id, submission_id, evidence_id, status, reason, extracted_value, confidence, rule_trace, manual_review_reason, human_reviewer_action, tender_source_json, bidder_source_json, model_version, rule_version) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
+            "INSERT INTO verdicts (id, criterion_id, submission_id, evidence_id, status, reason, extracted_value, confidence, rule_trace, manual_review_reason, human_reviewer_action, tender_source_json, bidder_source_json, model_version, rule_version, uncertainty_type, suggested_action) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
             [
                 _id(),
                 criterion_pk,
@@ -283,13 +309,15 @@ class ProcurementRepository:
                 _json(to_dict(verdict.bidder_source)),
                 "",
                 "v1",
+                verdict.uncertainty_type,
+                verdict.suggested_action,
             ],
         )
 
-    def _insert_review_task(self, tender_pk: str, submission_pk: str | None, criterion_pk: str | None, reason: str, priority: str, source_file: str) -> None:
+    def _insert_review_task(self, tender_pk: str, submission_pk: str | None, criterion_pk: str | None, task) -> None:
         self._execute(
-            "INSERT INTO review_tasks (id, tender_id, submission_id, criterion_id, reason, priority, source_file, status) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
-            [_id(), tender_pk, submission_pk, criterion_pk, reason, priority, source_file, "open"],
+            "INSERT INTO review_tasks (id, tender_id, submission_id, criterion_id, reason, priority, source_file, status, issue_type, extracted_value, confidence, suggested_action) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
+            [_id(), tender_pk, submission_pk, criterion_pk, task.reason, task.priority, task.source.document, "open", task.issue_type, task.extracted_value, task.confidence, task.suggested_action],
         )
 
     def _insert_award(self, tender_pk: str, submission_map: dict[str, str], result: EvaluationResult) -> None:
@@ -404,6 +432,7 @@ def _postgres_schema() -> list[str]:
             page_count INTEGER NOT NULL,
             parsed_text TEXT NOT NULL,
             source_type TEXT NOT NULL,
+            document_quality_json TEXT NOT NULL DEFAULT '{}',
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
         """,
@@ -442,6 +471,7 @@ def _postgres_schema() -> list[str]:
             page_count INTEGER NOT NULL,
             parsed_text TEXT NOT NULL,
             source_type TEXT NOT NULL,
+            document_quality_json TEXT NOT NULL DEFAULT '{}',
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
         """,
@@ -464,6 +494,7 @@ def _shared_postgres_tables() -> list[str]:
             start_offset INTEGER NOT NULL,
             end_offset INTEGER NOT NULL,
             chunk_text TEXT NOT NULL,
+            quality_flags_json TEXT NOT NULL DEFAULT '[]',
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
         """,
@@ -484,6 +515,7 @@ def _shared_postgres_tables() -> list[str]:
             source_excerpt TEXT NOT NULL,
             source_section TEXT NOT NULL,
             source_chunk_id TEXT NOT NULL DEFAULT '',
+            criteria_risk_flags_json TEXT NOT NULL DEFAULT '[]',
             version INTEGER NOT NULL DEFAULT 1
         )
         """,
@@ -500,7 +532,9 @@ def _shared_postgres_tables() -> list[str]:
             normalized_value TEXT NOT NULL DEFAULT '',
             confidence DOUBLE PRECISION NOT NULL,
             source_excerpt TEXT NOT NULL,
-            notes TEXT NOT NULL DEFAULT ''
+            notes TEXT NOT NULL DEFAULT '',
+            uncertainty_type TEXT NOT NULL DEFAULT '',
+            candidate_snippets_json TEXT NOT NULL DEFAULT '[]'
         )
         """,
         """
@@ -520,6 +554,8 @@ def _shared_postgres_tables() -> list[str]:
             bidder_source_json TEXT NOT NULL,
             model_version TEXT NOT NULL DEFAULT '',
             rule_version TEXT NOT NULL DEFAULT 'v1',
+            uncertainty_type TEXT NOT NULL DEFAULT '',
+            suggested_action TEXT NOT NULL DEFAULT '',
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
         """,
@@ -532,6 +568,10 @@ def _shared_postgres_tables() -> list[str]:
             reason TEXT NOT NULL,
             priority TEXT NOT NULL DEFAULT 'high',
             source_file TEXT NOT NULL DEFAULT '',
+            issue_type TEXT NOT NULL DEFAULT '',
+            extracted_value TEXT NOT NULL DEFAULT '',
+            confidence DOUBLE PRECISION NOT NULL DEFAULT 0,
+            suggested_action TEXT NOT NULL DEFAULT '',
             status TEXT NOT NULL DEFAULT 'open',
             reviewer_action TEXT NOT NULL DEFAULT '',
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -608,15 +648,15 @@ def _sqlite_schema() -> list[str]:
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
         """,
-        "CREATE TABLE IF NOT EXISTS tender_documents (id TEXT PRIMARY KEY, tender_id TEXT NOT NULL, filename TEXT NOT NULL, storage_uri TEXT NOT NULL, checksum_sha256 TEXT NOT NULL, parser TEXT NOT NULL, parse_confidence REAL NOT NULL, page_count INTEGER NOT NULL, parsed_text TEXT NOT NULL, source_type TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+        "CREATE TABLE IF NOT EXISTS tender_documents (id TEXT PRIMARY KEY, tender_id TEXT NOT NULL, filename TEXT NOT NULL, storage_uri TEXT NOT NULL, checksum_sha256 TEXT NOT NULL, parser TEXT NOT NULL, parse_confidence REAL NOT NULL, page_count INTEGER NOT NULL, parsed_text TEXT NOT NULL, source_type TEXT NOT NULL, document_quality_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
         "CREATE TABLE IF NOT EXISTS vendors (id TEXT PRIMARY KEY, legal_name TEXT NOT NULL UNIQUE, gstin TEXT, pan TEXT, msme_status TEXT, debarment_declaration INTEGER, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
         "CREATE TABLE IF NOT EXISTS submissions (id TEXT PRIMARY KEY, tender_id TEXT NOT NULL, vendor_id TEXT NOT NULL, bidder_name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'submitted', submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(tender_id, vendor_id))",
-        "CREATE TABLE IF NOT EXISTS bid_documents (id TEXT PRIMARY KEY, tender_id TEXT NOT NULL, submission_id TEXT NOT NULL, filename TEXT NOT NULL, storage_uri TEXT NOT NULL, checksum_sha256 TEXT NOT NULL, parser TEXT NOT NULL, parse_confidence REAL NOT NULL, page_count INTEGER NOT NULL, parsed_text TEXT NOT NULL, source_type TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
-        "CREATE TABLE IF NOT EXISTS document_chunks (id TEXT PRIMARY KEY, tender_id TEXT NOT NULL, document_id TEXT, submission_id TEXT, document_kind TEXT NOT NULL, source_file TEXT NOT NULL, page INTEGER NOT NULL, section TEXT NOT NULL, start_offset INTEGER NOT NULL, end_offset INTEGER NOT NULL, chunk_text TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
-        "CREATE TABLE IF NOT EXISTS criteria (id TEXT PRIMARY KEY, tender_id TEXT NOT NULL, criterion_code TEXT NOT NULL, category TEXT NOT NULL, mandatory INTEGER NOT NULL, description TEXT NOT NULL, rule_type TEXT NOT NULL, threshold TEXT NOT NULL DEFAULT '', time_period TEXT NOT NULL DEFAULT '', accepted_evidence_json TEXT NOT NULL, source_file TEXT NOT NULL, source_page INTEGER NOT NULL, source_excerpt TEXT NOT NULL, source_section TEXT NOT NULL, source_chunk_id TEXT NOT NULL DEFAULT '', version INTEGER NOT NULL DEFAULT 1)",
-        "CREATE TABLE IF NOT EXISTS evidence (id TEXT PRIMARY KEY, criterion_id TEXT NOT NULL, submission_id TEXT NOT NULL, source_file TEXT NOT NULL, source_page INTEGER NOT NULL, source_section TEXT NOT NULL, source_chunk_id TEXT NOT NULL DEFAULT '', extracted_value TEXT NOT NULL, normalized_value TEXT NOT NULL DEFAULT '', confidence REAL NOT NULL, source_excerpt TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '')",
-        "CREATE TABLE IF NOT EXISTS verdicts (id TEXT PRIMARY KEY, criterion_id TEXT NOT NULL, submission_id TEXT NOT NULL, evidence_id TEXT, status TEXT NOT NULL, reason TEXT NOT NULL, extracted_value TEXT NOT NULL DEFAULT '', confidence REAL NOT NULL DEFAULT 0, rule_trace TEXT NOT NULL, manual_review_reason TEXT NOT NULL DEFAULT '', human_reviewer_action TEXT NOT NULL DEFAULT '', tender_source_json TEXT NOT NULL, bidder_source_json TEXT NOT NULL, model_version TEXT NOT NULL DEFAULT '', rule_version TEXT NOT NULL DEFAULT 'v1', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
-        "CREATE TABLE IF NOT EXISTS review_tasks (id TEXT PRIMARY KEY, tender_id TEXT NOT NULL, submission_id TEXT, criterion_id TEXT, reason TEXT NOT NULL, priority TEXT NOT NULL DEFAULT 'high', source_file TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', reviewer_action TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+        "CREATE TABLE IF NOT EXISTS bid_documents (id TEXT PRIMARY KEY, tender_id TEXT NOT NULL, submission_id TEXT NOT NULL, filename TEXT NOT NULL, storage_uri TEXT NOT NULL, checksum_sha256 TEXT NOT NULL, parser TEXT NOT NULL, parse_confidence REAL NOT NULL, page_count INTEGER NOT NULL, parsed_text TEXT NOT NULL, source_type TEXT NOT NULL, document_quality_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+        "CREATE TABLE IF NOT EXISTS document_chunks (id TEXT PRIMARY KEY, tender_id TEXT NOT NULL, document_id TEXT, submission_id TEXT, document_kind TEXT NOT NULL, source_file TEXT NOT NULL, page INTEGER NOT NULL, section TEXT NOT NULL, start_offset INTEGER NOT NULL, end_offset INTEGER NOT NULL, chunk_text TEXT NOT NULL, quality_flags_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+        "CREATE TABLE IF NOT EXISTS criteria (id TEXT PRIMARY KEY, tender_id TEXT NOT NULL, criterion_code TEXT NOT NULL, category TEXT NOT NULL, mandatory INTEGER NOT NULL, description TEXT NOT NULL, rule_type TEXT NOT NULL, threshold TEXT NOT NULL DEFAULT '', time_period TEXT NOT NULL DEFAULT '', accepted_evidence_json TEXT NOT NULL, source_file TEXT NOT NULL, source_page INTEGER NOT NULL, source_excerpt TEXT NOT NULL, source_section TEXT NOT NULL, source_chunk_id TEXT NOT NULL DEFAULT '', criteria_risk_flags_json TEXT NOT NULL DEFAULT '[]', version INTEGER NOT NULL DEFAULT 1)",
+        "CREATE TABLE IF NOT EXISTS evidence (id TEXT PRIMARY KEY, criterion_id TEXT NOT NULL, submission_id TEXT NOT NULL, source_file TEXT NOT NULL, source_page INTEGER NOT NULL, source_section TEXT NOT NULL, source_chunk_id TEXT NOT NULL DEFAULT '', extracted_value TEXT NOT NULL, normalized_value TEXT NOT NULL DEFAULT '', confidence REAL NOT NULL, source_excerpt TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '', uncertainty_type TEXT NOT NULL DEFAULT '', candidate_snippets_json TEXT NOT NULL DEFAULT '[]')",
+        "CREATE TABLE IF NOT EXISTS verdicts (id TEXT PRIMARY KEY, criterion_id TEXT NOT NULL, submission_id TEXT NOT NULL, evidence_id TEXT, status TEXT NOT NULL, reason TEXT NOT NULL, extracted_value TEXT NOT NULL DEFAULT '', confidence REAL NOT NULL DEFAULT 0, rule_trace TEXT NOT NULL, manual_review_reason TEXT NOT NULL DEFAULT '', human_reviewer_action TEXT NOT NULL DEFAULT '', tender_source_json TEXT NOT NULL, bidder_source_json TEXT NOT NULL, model_version TEXT NOT NULL DEFAULT '', rule_version TEXT NOT NULL DEFAULT 'v1', uncertainty_type TEXT NOT NULL DEFAULT '', suggested_action TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+        "CREATE TABLE IF NOT EXISTS review_tasks (id TEXT PRIMARY KEY, tender_id TEXT NOT NULL, submission_id TEXT, criterion_id TEXT, reason TEXT NOT NULL, priority TEXT NOT NULL DEFAULT 'high', source_file TEXT NOT NULL DEFAULT '', issue_type TEXT NOT NULL DEFAULT '', extracted_value TEXT NOT NULL DEFAULT '', confidence REAL NOT NULL DEFAULT 0, suggested_action TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', reviewer_action TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
         "CREATE TABLE IF NOT EXISTS bidder_results (id TEXT PRIMARY KEY, tender_id TEXT NOT NULL, submission_id TEXT NOT NULL, bidder_name TEXT NOT NULL, overall_status TEXT NOT NULL, result_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
         "CREATE TABLE IF NOT EXISTS awards (id TEXT PRIMARY KEY, tender_id TEXT NOT NULL, winning_submission_id TEXT, status TEXT NOT NULL DEFAULT 'pending_approval', justification TEXT NOT NULL, award_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
         "CREATE TABLE IF NOT EXISTS contracts (id TEXT PRIMARY KEY, award_id TEXT NOT NULL, contract_number TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'draft', delivery_terms TEXT NOT NULL DEFAULT '', performance_security_expiry TEXT, contract_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",

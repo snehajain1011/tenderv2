@@ -8,6 +8,18 @@ CriterionCategory = Literal["financial", "technical", "compliance", "document", 
 VerdictStatus = Literal["PASS", "FAIL", "NEED_MANUAL_REVIEW"]
 OverallStatus = Literal["Eligible", "Not Eligible", "Need Manual Review"]
 ProcurementStage = Literal["pre_tender", "tender", "post_tender"]
+UncertaintyType = Literal[
+    "",
+    "LOW_OCR_CONFIDENCE",
+    "MISSING_REQUIRED_DOCUMENT",
+    "VALUE_NOT_FOUND",
+    "AMBIGUOUS_VALUE",
+    "CONFLICTING_EVIDENCE",
+    "UNSUPPORTED_FORMAT",
+    "AMBIGUOUS_TENDER_LANGUAGE",
+    "PARTIAL_SUBMISSION",
+    "RULE_FAILURE",
+]
 
 
 @dataclass(frozen=True)
@@ -17,6 +29,19 @@ class Citation:
     section: str
     excerpt: str
     chunk_id: str = ""
+
+
+@dataclass(frozen=True)
+class DocumentQuality:
+    text_density: float = 0.0
+    ocr_engine: str = ""
+    ocr_confidence: float = 1.0
+    image_resolution: str = ""
+    skew_or_blur_detected: bool = False
+    page_count: int = 1
+    empty_pages: list[int] = field(default_factory=list)
+    tables_detected: int = 0
+    quality_flags: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -30,6 +55,7 @@ class Document:
     source_type: str = "text"
     page_count: int = 1
     parser: str = "text"
+    quality: DocumentQuality = field(default_factory=DocumentQuality)
 
 
 @dataclass(frozen=True)
@@ -42,6 +68,7 @@ class RagChunk:
     section: str
     start: int
     end: int
+    quality_flags: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -61,6 +88,7 @@ class Criterion:
     time_period: str = ""
     comparison_rule: str = "present"
     accepted_evidence: list[str] = field(default_factory=list)
+    criteria_risk_flags: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -74,6 +102,8 @@ class Evidence:
     confidence: float
     normalized_value: str = ""
     notes: str = ""
+    uncertainty_type: UncertaintyType = ""
+    candidate_snippets: list[Citation] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -89,6 +119,8 @@ class Verdict:
     rule_trace: str
     manual_review_reason: str = ""
     human_reviewer_action: str = ""
+    uncertainty_type: UncertaintyType = ""
+    suggested_action: str = ""
 
 
 @dataclass(frozen=True)
@@ -99,6 +131,10 @@ class ReviewTask:
     reason: str
     priority: str
     source: Citation
+    issue_type: UncertaintyType = ""
+    extracted_value: str = ""
+    confidence: float = 0.0
+    suggested_action: str = ""
 
 
 @dataclass(frozen=True)

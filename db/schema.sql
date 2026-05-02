@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS tender_documents (
     page_count INTEGER NOT NULL,
     parsed_text TEXT NOT NULL,
     source_type TEXT NOT NULL,
+    document_quality_json TEXT NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -57,6 +58,7 @@ CREATE TABLE IF NOT EXISTS bid_documents (
     page_count INTEGER NOT NULL,
     parsed_text TEXT NOT NULL,
     source_type TEXT NOT NULL,
+    document_quality_json TEXT NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -72,6 +74,7 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     start_offset INTEGER NOT NULL,
     end_offset INTEGER NOT NULL,
     chunk_text TEXT NOT NULL,
+    quality_flags_json TEXT NOT NULL DEFAULT '[]',
     embedding vector(1024),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -92,6 +95,7 @@ CREATE TABLE IF NOT EXISTS criteria (
     source_excerpt TEXT NOT NULL,
     source_section TEXT NOT NULL,
     source_chunk_id TEXT NOT NULL DEFAULT '',
+    criteria_risk_flags_json TEXT NOT NULL DEFAULT '[]',
     version INTEGER NOT NULL DEFAULT 1
 );
 
@@ -107,7 +111,9 @@ CREATE TABLE IF NOT EXISTS evidence (
     normalized_value TEXT NOT NULL DEFAULT '',
     confidence DOUBLE PRECISION NOT NULL,
     source_excerpt TEXT NOT NULL,
-    notes TEXT NOT NULL DEFAULT ''
+    notes TEXT NOT NULL DEFAULT '',
+    uncertainty_type TEXT NOT NULL DEFAULT '',
+    candidate_snippets_json TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS verdicts (
@@ -126,6 +132,8 @@ CREATE TABLE IF NOT EXISTS verdicts (
     bidder_source_json TEXT NOT NULL,
     model_version TEXT NOT NULL DEFAULT '',
     rule_version TEXT NOT NULL DEFAULT 'v1',
+    uncertainty_type TEXT NOT NULL DEFAULT '',
+    suggested_action TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -137,6 +145,10 @@ CREATE TABLE IF NOT EXISTS review_tasks (
     reason TEXT NOT NULL,
     priority TEXT NOT NULL DEFAULT 'high',
     source_file TEXT NOT NULL DEFAULT '',
+    issue_type TEXT NOT NULL DEFAULT '',
+    extracted_value TEXT NOT NULL DEFAULT '',
+    confidence DOUBLE PRECISION NOT NULL DEFAULT 0,
+    suggested_action TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'open',
     reviewer_action TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()

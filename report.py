@@ -77,27 +77,29 @@ def _markdown_report(result: EvaluationResult) -> str:
                 "",
                 f"Overall status: **{bidder.overall_status}**",
                 "",
-                "| Criterion | Status | Extracted Value | Reason | Tender Source | Bidder Source | Rule Trace | Manual Review |",
-                "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| Criterion | Status | Issue Type | Extracted Value | Reason | Tender Source | Bidder Source | Rule Trace | Manual Review | Suggested Action |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
             ]
         )
         for verdict in bidder.verdicts:
             lines.append(
-                "| {criterion} | {status} | {value} | {reason} | {tender} | {bidder_source} | {trace} | {review} |".format(
+                "| {criterion} | {status} | {issue} | {value} | {reason} | {tender} | {bidder_source} | {trace} | {review} | {action} |".format(
                     criterion=verdict.criterion_id,
                     status=verdict.status,
+                    issue=_clean(verdict.uncertainty_type),
                     value=_clean(verdict.extracted_value),
                     reason=_clean(verdict.reason),
                     tender=_citation(verdict.tender_source),
                     bidder_source=_citation(verdict.bidder_source),
                     trace=_clean(verdict.rule_trace),
                     review=_clean(verdict.manual_review_reason),
+                    action=_clean(verdict.suggested_action),
                 )
             )
         if bidder.review_tasks:
             lines.extend(["", "Review tasks:"])
             for task in bidder.review_tasks:
-                lines.append(f"- `{task.task_id}`: {_clean(task.reason)} Source: {_citation(task.source)}")
+                lines.append(f"- `{task.task_id}` [{_clean(task.issue_type)}]: {_clean(task.reason)} Source: {_citation(task.source)} Suggested action: {_clean(task.suggested_action)}")
         lines.append("")
 
     return "\n".join(lines)
@@ -176,7 +178,11 @@ def _agent_file_payload(agent_name: str, result: EvaluationResult, audit_events:
             "compliance_findings": _criteria_by_category(result, {"compliance", "document"}),
         },
         "Risk Review Agent": {
-            "risk_findings": result.final_accuracy_issues or _manual_review_summary(result),
+            "risk_findings": {
+                "criteria_risks": _criteria_risk_summary(result),
+                "final_accuracy_issues": result.final_accuracy_issues,
+                "manual_reviews": _manual_review_summary(result),
+            },
         },
         "Publication Agent": {
             "publication_pack": {
@@ -280,6 +286,20 @@ def _manual_review_summary(result: EvaluationResult) -> list[dict[str, object]]:
     return [to_dict(task) for bidder in result.bidders for task in bidder.review_tasks]
 
 
+def _criteria_risk_summary(result: EvaluationResult) -> list[dict[str, object]]:
+    return [
+        {
+            "criterion_id": criterion.id,
+            "description": criterion.description,
+            "risk_flags": criterion.criteria_risk_flags,
+            "source": to_dict(criterion.tender_citation),
+            "suggested_action": "Review this tender clause for objective, verifiable interpretation before final award.",
+        }
+        for criterion in result.criteria
+        if criterion.criteria_risk_flags
+    ]
+
+
 def _submission_sources(result: EvaluationResult) -> list[dict[str, object]]:
     return [
         {
@@ -307,6 +327,8 @@ def _evidence_from_verdicts(result: EvaluationResult) -> list[dict[str, object]]
             "page": verdict.bidder_source.page,
             "extracted_value": verdict.extracted_value,
             "confidence": verdict.confidence,
+            "uncertainty_type": verdict.uncertainty_type,
+            "suggested_action": verdict.suggested_action,
             "source_excerpt": verdict.bidder_source.excerpt,
         }
         for bidder in result.bidders
