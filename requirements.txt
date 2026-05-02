@@ -1,8 +1,13 @@
 # Required for the included local-text demo: Python standard library only.
 #
-# Optional document parsing/OCR packages:
-# pymupdf
-# pillow
+# Optional tests/API/document parsing/OCR packages:
+pytest
+fastapi
+uvicorn
+python-multipart
+psycopg[binary]
+pymupdf
+pillow
+rapidocr-onnxruntime
 # pytesseract
 # docling
-

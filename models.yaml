@@ -1,0 +1,12 @@
+models:
+  reasoning:
+    provider: ollama
+    model: qwen3:8b
+    endpoint: http://localhost:11434
+  vision:
+    provider: ollama
+    model: qwen2.5vl:7b
+    endpoint: http://localhost:11434
+  embeddings:
+    provider: local
+    model: term-frequency

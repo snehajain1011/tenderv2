@@ -1,4 +1,8 @@
 __pycache__/
 .pytest_cache/
 *.pyc
-
+workspaces/
+outputs/
+*.sqlite
+frontend/node_modules/
+frontend/dist/

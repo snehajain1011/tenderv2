@@ -3,41 +3,43 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from document_loader import load_bidder_documents, load_tender_documents
-from evaluator import evaluate_bidders, extract_criteria, extract_evidence
-from llm_client import OllamaClient
-from report import write_reports
+from workflow import create_demo_workspace, run_workspace
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate bidder eligibility against tender criteria.")
-    parser.add_argument("--tender-dir", default="data/tender", help="Folder containing tender documents.")
-    parser.add_argument("--bidders-dir", default="data/bidders", help="Folder containing bidder subfolders.")
+    parser = argparse.ArgumentParser(description="Production-style procurement AI workflow runner.")
+    parser.add_argument("--workspace", default="", help="Workspace containing tender_documents/ and bidder_submissions/.")
     parser.add_argument("--outputs-dir", default="outputs", help="Folder where reports are written.")
-    parser.add_argument("--use-llm", action="store_true", help="Use local Ollama-compatible LLM if available.")
-    parser.add_argument("--model", default="qwen3:8b", help="Ollama model name.")
+    parser.add_argument("--models", default="models.yaml", help="Model registry config.")
+    parser.add_argument("--use-llm", action="store_true", help="Use configured local LLM where available.")
+    parser.add_argument("--demo", action="store_true", help="Create and run the representative sandbox workspace.")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    tender_dir = Path(args.tender_dir)
-    bidders_dir = Path(args.bidders_dir)
+    workspace = Path(args.workspace) if args.workspace else Path("workspaces/demo")
     outputs_dir = Path(args.outputs_dir)
 
-    llm = OllamaClient(model=args.model) if args.use_llm else None
+    if args.demo:
+        create_demo_workspace(workspace)
+    elif not args.workspace:
+        raise SystemExit("No workspace supplied. Use --demo for sandbox data or --workspace path\\to\\workspace for real documents.")
+    elif not workspace.exists():
+        raise SystemExit(
+            f"Workspace not found: {workspace}\n"
+            "Create tender_documents/ and bidder_submissions/ inside it, or run with --demo."
+        )
 
-    tender_docs = load_tender_documents(tender_dir)
-    bidder_docs = load_bidder_documents(bidders_dir)
+    result, _ = run_workspace(workspace, outputs_dir, Path(args.models), use_llm=args.use_llm)
 
-    criteria, criteria_audit = extract_criteria(tender_docs, llm)
-    evidence_by_bidder, evidence_audit = extract_evidence(criteria, bidder_docs, llm)
-    result, evaluation_audit = evaluate_bidders(criteria, evidence_by_bidder)
-
-    audit_events = [*criteria_audit, *evidence_audit, *evaluation_audit]
-    write_reports(outputs_dir, result, audit_events)
-
-    print(f"Evaluated {len(result.bidders)} bidders against {len(criteria)} criteria.")
+    print(f"Tender workspace: {workspace}")
+    print(f"Evaluated {len(result.bidders)} bidders against {len(result.criteria)} criteria.")
+    print(f"Final accuracy gate: {'PASSED' if result.final_accuracy_gate_passed else 'FAILED'}")
+    if result.final_accuracy_issues:
+        print("Accuracy issues:")
+        for issue in result.final_accuracy_issues:
+            print(f"- {issue}")
     print(f"Markdown report: {outputs_dir / 'evaluation_report.md'}")
     print(f"JSON report: {outputs_dir / 'evaluation_report.json'}")
     print(f"Audit log: {outputs_dir / 'audit_log.jsonl'}")
@@ -46,4 +48,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
