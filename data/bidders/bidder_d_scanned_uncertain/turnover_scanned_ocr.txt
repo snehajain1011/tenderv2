@@ -1,0 +1,6 @@
+Bidder: Delta Field Technologies
+Document: OCR output from scanned turnover certificate
+
+OCR confidence note: low.
+The average annual turnover appears to be INR 1.? crore, but the scanned figure is unclear.
+

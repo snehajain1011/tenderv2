@@ -1,0 +1,8 @@
+# Required for the included local-text demo: Python standard library only.
+#
+# Optional document parsing/OCR packages:
+# pymupdf
+# pillow
+# pytesseract
+# docling
+

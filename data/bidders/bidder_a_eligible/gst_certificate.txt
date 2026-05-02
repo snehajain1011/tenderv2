@@ -1,0 +1,6 @@
+Bidder: Alpha Secure Systems Pvt Ltd
+Document: GST Registration Certificate
+
+GSTIN: 07ABCDE1234F1Z5
+Status: Active
+

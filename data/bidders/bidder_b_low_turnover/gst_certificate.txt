@@ -1,0 +1,6 @@
+Bidder: Beta Infrastructure LLP
+Document: GST Registration Certificate
+
+GSTIN: 27BETAA1234F1Z9
+Status: Active
+

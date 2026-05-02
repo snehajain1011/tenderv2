@@ -1,0 +1,6 @@
+Bidder: Delta Field Technologies
+Document: GST Registration Certificate
+
+GSTIN: 29DELTA1234F1Z2
+Status: Active
+
