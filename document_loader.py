@@ -3,14 +3,18 @@ from __future__ import annotations
 import hashlib
 import re
 from pathlib import Path
+import xml.etree.ElementTree as ET
+from zipfile import BadZipFile, ZipFile
 
 from schema import AuditEvent, Citation, Document, DocumentQuality, ReviewTask
 
 
 TEXT_EXTENSIONS = {".txt", ".md", ".csv"}
+DOCX_EXTENSIONS = {".docx"}
+DOC_EXTENSIONS = {".doc"}
 PDF_EXTENSIONS = {".pdf"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp"}
-SUPPORTED_EXTENSIONS = TEXT_EXTENSIONS | PDF_EXTENSIONS | IMAGE_EXTENSIONS
+SUPPORTED_EXTENSIONS = TEXT_EXTENSIONS | DOCX_EXTENSIONS | DOC_EXTENSIONS | PDF_EXTENSIONS | IMAGE_EXTENSIONS
 
 
 def load_tender_documents(folder: Path) -> tuple[list[Document], list[AuditEvent], list[ReviewTask]]:
@@ -90,17 +94,50 @@ def _load_one(path: Path) -> Document:
     document_id = checksum[:16]
     if suffix in TEXT_EXTENSIONS:
         return _load_text(path, checksum, document_id)
+    if suffix in DOCX_EXTENSIONS:
+        return _load_docx(path, checksum, document_id)
+    if suffix in DOC_EXTENSIONS:
+        return _load_doc(path, checksum, document_id)
     if suffix in PDF_EXTENSIONS:
         return _load_pdf(path, checksum, document_id)
     return _load_image(path, checksum, document_id)
 
 
 def _load_text(path: Path, checksum: str, document_id: str) -> Document:
-    text = path.read_text(encoding="utf-8")
-    confidence = 0.45 if "ocr confidence note: low" in text.lower() else 1.0
+    try:
+        text = path.read_text(encoding="utf-8")
+        confidence = 0.45 if "ocr confidence note: low" in text.lower() else 1.0
+    except UnicodeDecodeError:
+        # Do not crash evaluation when an uploaded text-like file is binary/invalid UTF-8.
+        text = "Text file could not be decoded as UTF-8; manual review required."
+        confidence = 0.2
     quality = _document_quality(text, confidence, "text", 1, "", "")
     return Document(document_id, path.name, str(path), checksum, text, confidence, "text", 1, "text", quality)
 
+def _load_docx(path: Path, checksum: str, document_id: str) -> Document:
+    try:
+        with ZipFile(path) as archive:
+            xml_content = archive.read("word/document.xml")
+    except (BadZipFile, KeyError, FileNotFoundError):
+        text = "DOCX could not be parsed; manual review required."
+        quality = _document_quality(text, 0.2, "docx", 1, "", "")
+        return Document(document_id, path.name, str(path), checksum, text, 0.2, "text", 1, "docx", quality)
+    root = ET.fromstring(xml_content)
+    namespace = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    paragraphs = [
+        "".join(node.text or "" for node in para.findall(".//w:t", namespace)).strip()
+        for para in root.findall(".//w:p", namespace)
+    ]
+    lines = [line for line in paragraphs if line]
+    text = "\n".join(lines).strip() or "DOCX parsed but no visible text found."
+    confidence = 0.9 if lines else 0.3
+    quality = _document_quality(text, confidence, "docx", 1, "", "")
+    return Document(document_id, path.name, str(path), checksum, text, confidence, "text", 1, "docx", quality)
+
+def _load_doc(path: Path, checksum: str, document_id: str) -> Document:
+    text = "Legacy .doc files are not parsed in this prototype; convert to .docx or .pdf for evaluation."
+    quality = _document_quality(text, 0.2, "doc", 1, "", "")
+    return Document(document_id, path.name, str(path), checksum, text, 0.2, "text", 1, "doc", quality)
 
 def _load_pdf(path: Path, checksum: str, document_id: str) -> Document:
     try:
