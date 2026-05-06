@@ -250,6 +250,38 @@ h3 {
   padding: 14px;
 }
 
+.bidder-card.gstin-rejected {
+  border-color: #fca5a5;
+  background: #fff5f5;
+}
+
+.gstin-rejection-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  padding: 10px 14px;
+  color: #991b1b;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.gstin-rejection-banner svg {
+  flex: 0 0 auto;
+  color: #dc2626;
+}
+
+.gstin-rejection-reason {
+  width: 100%;
+  margin: 4px 0 0;
+  font-weight: 400;
+  color: #7f1d1d;
+  font-size: 12px;
+}
+
 .bidder-head {
   display: flex;
   justify-content: space-between;
@@ -472,6 +504,370 @@ h3 {
   color: #e7eefb;
   border-radius: 6px;
   font-size: 13px;
+}
+
+/* ── Tender Quality Panel ────────────────────────────────────────────────── */
+
+.tq-grade {
+  font-size: 42px;
+  font-weight: 900;
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.tq-summary {
+  color: #4b5563;
+  font-size: 13px;
+  margin-bottom: 14px;
+  line-height: 1.55;
+}
+
+.tq-list {
+  display: grid;
+  gap: 6px;
+}
+
+.tq-row {
+  background: #f8fafc;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.tq-row summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  flex-wrap: wrap;
+}
+
+.tq-row summary::-webkit-details-marker { display: none; }
+
+.tq-score {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
+
+.chip-mandatory {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #dbeafe;
+  color: #1e40af;
+  flex: 0 0 auto;
+}
+
+.tq-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-left: 4px;
+}
+
+.flag-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
+
+/* ── Risk Intelligence Panel ─────────────────────────────────────────────── */
+
+.risk-list {
+  display: grid;
+  gap: 8px;
+}
+
+.risk-row {
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  padding: 10px 14px;
+  background: #fafbfc;
+}
+
+.risk-row summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  flex-wrap: wrap;
+}
+
+.risk-row summary::-webkit-details-marker { display: none; }
+
+.risk-sev-chip {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+  flex: 0 0 auto;
+}
+
+.risk-detail {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #374151;
+  line-height: 1.55;
+}
+
+/* ── Rendered Markdown report ────────────────────────────────────────────── */
+
+.report-mode-toggle {
+  display: flex;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.report-mode-toggle button {
+  border: none;
+  background: #f8fafc;
+  color: #374151;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.report-mode-toggle button.active {
+  background: #1e3a5f;
+  color: #fff;
+}
+
+.report-rendered {
+  padding: 20px 24px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  line-height: 1.7;
+  font-size: 13.5px;
+  color: #1f2937;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.report-rendered h1,
+.report-rendered h2,
+.report-rendered h3 {
+  margin: 20px 0 8px;
+  color: #1e3a5f;
+}
+
+.report-rendered h1 { font-size: 20px; border-bottom: 2px solid #e5e7eb; padding-bottom: 6px; }
+.report-rendered h2 { font-size: 16px; }
+.report-rendered h3 { font-size: 14px; }
+
+.report-rendered table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 12px;
+}
+
+.report-rendered th {
+  background: #1e3a5f;
+  color: #fff;
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.report-rendered td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.report-rendered tr:nth-child(even) td { background: #f9fafb; }
+
+.report-rendered code {
+  background: #f1f5f9;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.report-rendered pre {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 12px;
+  border-radius: 6px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.report-rendered blockquote {
+  border-left: 4px solid #cbd5e1;
+  margin: 10px 0;
+  padding: 4px 14px;
+  color: #6b7280;
+}
+
+.report-rendered ul,
+.report-rendered ol {
+  padding-left: 22px;
+  margin: 8px 0;
+}
+
+/* ── Vendor Directory ─────────────────────────────────────────────────────── */
+
+.dir-search {
+  border: 1px solid #cdd6e1;
+  border-radius: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  background: #fff;
+  font: inherit;
+  width: min(260px, 100%);
+}
+
+.vendor-dir-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.vendor-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px;
+  background: #fafbfc;
+}
+
+.vendor-card.vendor-flagged {
+  border-color: #fca5a5;
+  background: #fff5f5;
+}
+
+.vendor-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.vendor-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.vendor-criteria-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #e5e7eb;
+  gap: 1px;
+}
+
+.bar-pass   { background: #16a34a; }
+.bar-fail   { background: #dc2626; }
+.bar-review { background: #f59e0b; }
+
+.vendor-flag-reason {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #991b1b;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ── Audit Trail ──────────────────────────────────────────────────────────── */
+
+.audit-list {
+  display: grid;
+  gap: 4px;
+}
+
+.audit-row {
+  border-radius: 5px;
+  border: 1px solid #e5e7eb;
+  background: #fafbfc;
+}
+
+.audit-row summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+}
+
+.audit-row summary::-webkit-details-marker { display: none; }
+
+.audit-icon { color: #6b7280; flex: 0 0 auto; }
+
+.audit-step {
+  font-weight: 700;
+  color: #1e3a5f;
+  min-width: 200px;
+  font-size: 12px;
+}
+
+.audit-subject {
+  color: #6b7280;
+  font-size: 12px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.audit-detail {
+  margin: 0;
+  padding: 10px 14px;
+  background: #101827;
+  color: #94a3b8;
+  font-size: 11px;
+  max-height: 220px;
+  overflow: auto;
+  border-top: 1px solid #e5e7eb;
+  white-space: pre-wrap;
+}
+
+/* ── Per-bidder report download button ───────────────────────────────────── */
+
+.report-dl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 5px;
+  background: #f1f5f9;
+  color: #1e3a5f;
+  border: 1px solid #cbd5e1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.report-dl-btn:hover {
+  background: #e2e8f0;
 }
 
 @keyframes spin {

@@ -1,19 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { marked } from 'marked';
 import {
   AlertTriangle,
   BarChart3,
+  BookOpen,
   CheckCircle2,
   ClipboardList,
+  Clock,
+  Database,
   Download,
   FileCheck2,
   FileText,
   FolderUp,
   Gavel,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
+  ShieldX,
   Upload,
+  Users,
   UserPlus,
+  Zap,
 } from 'lucide-react';
 import './styles.css';
 
@@ -26,6 +34,8 @@ function App() {
   const [flow, setFlow] = useState(null);
   const [result, setResult] = useState(null);
   const [report, setReport] = useState('');
+  const [auditEvents, setAuditEvents] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('Ready');
 
@@ -79,6 +89,15 @@ function App() {
       await loadFlow(workspace);
       const md = await fetch(`${API}/workspaces/${encodeURIComponent(workspace)}/reports/evaluation_report.md`).then((res) => res.text());
       setReport(md);
+      // Load audit trail and vendor directory after evaluation
+      try {
+        const auditData = await request(`${API}/workspaces/${encodeURIComponent(workspace)}/audit-trail`);
+        setAuditEvents(auditData.events || []);
+      } catch { /* audit log may not exist yet */ }
+      try {
+        const vendorData = await request(`${API}/workspaces/${encodeURIComponent(workspace)}/vendor-directory`);
+        setVendors(vendorData.vendors || []);
+      } catch { /* vendor directory may not exist yet */ }
       setMessage(`Evaluation complete. Final accuracy gate ${data.final_accuracy_gate_passed ? 'passed' : 'failed'}.`);
     } catch (error) {
       setMessage(error.message);
@@ -164,6 +183,12 @@ function App() {
           <button className={activeView === 'reports' ? 'active' : ''} onClick={() => setActiveView('reports')}>
             <FileText size={18} /> Reports
           </button>
+          <button className={activeView === 'directory' ? 'active' : ''} onClick={() => setActiveView('directory')}>
+            <Database size={18} /> Vendor Directory
+          </button>
+          <button className={activeView === 'audit' ? 'active' : ''} onClick={() => setActiveView('audit')}>
+            <BookOpen size={18} /> Audit Trail
+          </button>
         </nav>
       </aside>
 
@@ -186,6 +211,8 @@ function App() {
         {activeView === 'review' && <ReviewView metrics={metrics} result={result} flow={flow} />}
         {activeView === 'award' && <AwardView award={award} result={result} />}
         {activeView === 'reports' && <ReportView report={report} result={result} />}
+        {activeView === 'directory' && <VendorDirectoryView vendors={vendors} workspace={workspace} />}
+        {activeView === 'audit' && <AuditTrailView events={auditEvents} />}
       </section>
     </main>
   );
@@ -273,6 +300,10 @@ function ReviewView({ metrics, result, flow }) {
         <Metric icon={<AlertTriangle />} label="Manual Review" value={metrics.review} />
         <Metric icon={<BarChart3 />} label="Final Gate" value={metrics.finalGate} />
       </section>
+
+      {result?.bidder_quality && <BidderQualityPanel quality={result.bidder_quality} />}
+      {result?.risk_signals?.length > 0 && <RiskIntelligencePanel signals={result.risk_signals} />}
+
       <section className="panel">
         <h2>Tendering Stage Workflow</h2>
         <StepList steps={flow?.tender_stage || []} />
@@ -287,6 +318,82 @@ function ReviewView({ metrics, result, flow }) {
         <BidderTable result={result} />
       </section>
     </>
+  );
+}
+
+function BidderQualityPanel({ quality }) {
+  const gradeColour = { A: '#166534', B: '#15803d', C: '#92400e', D: '#b45309', F: '#991b1b' };
+  const gradeBg     = { A: '#dcfce7', B: '#bbf7d0', C: '#fef3c7', D: '#fde68a', F: '#fee2e2' };
+  const colour = gradeColour[quality.grade] || '#374151';
+  const bg     = gradeBg[quality.grade]     || '#e5e7eb';
+  const highRisk = quality.flagged_criteria.filter((c) => c.score >= 60);
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2><ShieldAlert size={17} style={{ verticalAlign: 'middle', marginRight: 6 }} />Bidder Ambiguity Scoring</h2>
+          <p className="muted">AI-scored criteria for vague thresholds, subjective language, and unverifiable clauses — surfaces risk in bidder submissions before evaluation.</p>
+        </div>
+        <div className="tq-grade" style={{ color: colour, background: bg }}>
+          {quality.grade}
+        </div>
+      </div>
+      <p className="tq-summary">{quality.summary}</p>
+      {highRisk.length > 0 && (
+        <div className="tq-list">
+          {highRisk.map((c) => (
+            <details key={c.id} className="tq-row">
+              <summary>
+                <strong>{c.id}</strong>
+                <span className="tq-score" style={{ background: c.score >= 80 ? '#fee2e2' : '#fef3c7', color: c.score >= 80 ? '#991b1b' : '#92400e' }}>
+                  {c.score}/100
+                </span>
+                <span>{c.description.slice(0, 90)}{c.description.length > 90 ? '…' : ''}</span>
+                {c.mandatory && <span className="chip-mandatory">Mandatory</span>}
+              </summary>
+              <div className="tq-flags">
+                {c.flags.map((f) => <span key={f} className="flag-chip">{f.replace(/_/g, ' ')}</span>)}
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RiskIntelligencePanel({ signals }) {
+  const sevColour = { high: ['#991b1b', '#fee2e2'], medium: ['#92400e', '#fef3c7'], low: ['#1e40af', '#dbeafe'] };
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2><Zap size={17} style={{ verticalAlign: 'middle', marginRight: 6 }} />Procurement Risk Intelligence</h2>
+          <p className="muted">Fraud and collusion signals detected across all bidder submissions.</p>
+        </div>
+        <span className={`status ${signals.some((s) => s.severity === 'high') ? 'fail' : 'review'}`}>
+          {signals.filter((s) => s.severity === 'high').length} High · {signals.filter((s) => s.severity === 'medium').length} Medium
+        </span>
+      </div>
+      <div className="risk-list">
+        {signals.map((signal, idx) => {
+          const [fg, bg] = sevColour[signal.severity] || ['#374151', '#e5e7eb'];
+          return (
+            <details key={idx} className="risk-row">
+              <summary>
+                <span className="risk-sev-chip" style={{ color: fg, background: bg }}>{signal.severity.toUpperCase()}</span>
+                <strong>{signal.title}</strong>
+                <span className="muted">{signal.affected_bidders.join(', ')}</span>
+              </summary>
+              <div className="risk-detail">
+                <p>{signal.description}</p>
+                <p className="muted" style={{ marginTop: 6 }}>Evidence: {signal.evidence}</p>
+              </div>
+            </details>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -321,6 +428,8 @@ function AwardView({ award, result }) {
 }
 
 function ReportView({ report, result }) {
+  const [mode, setMode] = useState('rendered');
+  const renderedHtml = report ? marked.parse(report) : '';
   return (
     <section className="panel">
       <div className="panel-head">
@@ -328,58 +437,226 @@ function ReportView({ report, result }) {
           <h2>Consolidated Report</h2>
           <p>Every decision includes the criterion, source document, extracted value, and reason.</p>
         </div>
-        {result && (
-          <div className="report-links">
-            <a href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/evaluation_report.md`} target="_blank"><Download size={16} /> Markdown</a>
-            <a href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/evaluation_report.json`} target="_blank"><Download size={16} /> JSON</a>
-            <a href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/agent_outputs.json`} target="_blank"><Download size={16} /> Agent Outputs</a>
-            <a href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/audit_log.jsonl`} target="_blank"><Download size={16} /> Audit</a>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {result && (
+            <div className="report-links">
+              <a href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/evaluation_report.md`} target="_blank"><Download size={16} /> Markdown</a>
+              <a href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/evaluation_report.json`} target="_blank"><Download size={16} /> JSON</a>
+              <a href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/agent_outputs.json`} target="_blank"><Download size={16} /> Agent Outputs</a>
+              <a href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/audit_log.jsonl`} target="_blank"><Download size={16} /> Audit</a>
+            </div>
+          )}
+          <div className="report-mode-toggle">
+            <button className={mode === 'rendered' ? 'active' : ''} onClick={() => setMode('rendered')}>Preview</button>
+            <button className={mode === 'raw' ? 'active' : ''} onClick={() => setMode('raw')}>Raw</button>
           </div>
-        )}
+        </div>
       </div>
-      <pre className="report-preview">{report || 'Run an evaluation to preview the generated consolidated report.'}</pre>
+      {!report && <div className="empty">Run an evaluation to preview the generated consolidated report.</div>}
+      {report && mode === 'rendered' && (
+        <div
+          className="report-rendered"
+          dangerouslySetInnerHTML={{ __html: renderedHtml }}
+        />
+      )}
+      {report && mode === 'raw' && (
+        <pre className="report-preview">{report}</pre>
+      )}
     </section>
   );
+}
+
+function VendorDirectoryView({ vendors, workspace }) {
+  const [search, setSearch] = useState('');
+  const filtered = vendors.filter((v) =>
+    v.name.toLowerCase().includes(search.toLowerCase()) ||
+    (v.gstin || '').toLowerCase().includes(search.toLowerCase()) ||
+    (v.legal_name || '').toLowerCase().includes(search.toLowerCase())
+  );
+  const gstinColour = { clear: 'pass', invalid: 'fail', flagged: 'fail', not_found: 'review' };
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2><Users size={17} style={{ verticalAlign: 'middle', marginRight: 6 }} />Vendor Directory</h2>
+          <p className="muted">Verified supplier profiles with GSTIN status, certifications, and performance records from the latest evaluation.</p>
+        </div>
+        <input
+          className="dir-search"
+          placeholder="Search by name or GSTIN…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+      {!vendors.length
+        ? <div className="empty">Run an evaluation to populate the vendor directory.</div>
+        : (
+          <div className="vendor-dir-grid">
+            {filtered.map((v) => (
+              <article key={v.name} className={`vendor-card ${v.flagged ? 'vendor-flagged' : ''}`}>
+                <div className="vendor-card-head">
+                  <div>
+                    <strong>{v.name}</strong>
+                    {v.legal_name && v.legal_name !== v.name && (
+                      <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>{v.legal_name}</p>
+                    )}
+                  </div>
+                  <span className={`status ${v.overall_status === 'Eligible' ? 'pass' : v.overall_status === 'Not Eligible' ? 'fail' : 'review'}`}>
+                    {v.overall_status}
+                  </span>
+                </div>
+                <div className="vendor-meta">
+                  <span><strong>GSTIN:</strong> {v.gstin || '—'}</span>
+                  <span className={`status ${gstinColour[v.gstin_status] || 'neutral'}`} style={{ fontSize: 10 }}>
+                    {v.gstin_status.replace('_', ' ').toUpperCase()}
+                  </span>
+                </div>
+                <div className="vendor-criteria-bar">
+                  {v.total_criteria > 0 && (
+                    <>
+                      <span className="bar-pass" style={{ flex: v.criteria_passed }} title={`${v.criteria_passed} passed`} />
+                      <span className="bar-fail" style={{ flex: v.criteria_failed }} title={`${v.criteria_failed} failed`} />
+                      <span className="bar-review" style={{ flex: v.criteria_review }} title={`${v.criteria_review} review`} />
+                    </>
+                  )}
+                </div>
+                <p style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>
+                  {v.criteria_passed} passed · {v.criteria_failed} failed · {v.criteria_review} review · {v.review_tasks} task{v.review_tasks !== 1 ? 's' : ''}
+                </p>
+                {v.flagged && <p className="vendor-flag-reason"><ShieldX size={12} /> {v.flag_reason}</p>}
+              </article>
+            ))}
+          </div>
+        )}
+    </section>
+  );
+}
+
+function AuditTrailView({ events }) {
+  const [filter, setFilter] = useState('');
+  const filtered = events.filter((e) => {
+    if (!filter) return true;
+    const q = filter.toLowerCase();
+    return (
+      (e.step || '').toLowerCase().includes(q) ||
+      (e.subject || '').toLowerCase().includes(q) ||
+      JSON.stringify(e.detail || {}).toLowerCase().includes(q)
+    );
+  });
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2><BookOpen size={17} style={{ verticalAlign: 'middle', marginRight: 6 }} />Audit Trail</h2>
+          <p className="muted">
+            Full immutable log of every action — document uploads, GSTIN checks, evidence extraction, verdicts, and persistence.
+            Demonstrates fairness, accountability, and compliance to all stakeholders.
+          </p>
+        </div>
+        <input
+          className="dir-search"
+          placeholder="Filter events…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+      </div>
+      {!events.length
+        ? <div className="empty">Run an evaluation to generate the audit trail.</div>
+        : (
+          <div className="audit-list">
+            {filtered.map((evt, idx) => (
+              <details key={idx} className="audit-row">
+                <summary>
+                  <Clock size={13} className="audit-icon" />
+                  <span className="audit-step">{evt.step || '—'}</span>
+                  <span className="audit-subject">{evt.subject || ''}</span>
+                </summary>
+                <pre className="audit-detail">{JSON.stringify(evt.detail || {}, null, 2)}</pre>
+              </details>
+            ))}
+            {filtered.length === 0 && <div className="empty">No events match the filter.</div>}
+          </div>
+        )}
+    </section>
+  );
+}
+
+function gstinRejected(bidder) {
+  const s = bidder.gstin_check?.check_status;
+  return s === 'invalid' || s === 'flagged';
 }
 
 function BidderTable({ result }) {
   if (!result) return <div className="empty">Collect bidder documents, then run evaluation.</div>;
   return (
     <div className="bidder-list">
-      {result.bidders.map((bidder) => (
-        <article className="bidder-card" key={bidder.bidder}>
-          <div className="bidder-head">
-            <h3>{bidder.bidder}</h3>
-            <span className={`status ${statusClass(bidder.overall_status)}`}>{bidder.overall_status}</span>
-          </div>
-          <div className="verdict-table">
-            {bidder.verdicts.map((verdict) => (
-              <details className="verdict-row" key={verdict.criterion_id}>
-                <summary>
-                  <strong>{verdict.criterion_id}</strong>
-                  <span className={`status ${statusClass(verdict.status)}`}>{verdict.status}</span>
-                  <span>{verdict.extracted_value || 'No value'}</span>
-                  <p>{verdict.reason}</p>
-                </summary>
-                <div className="explanation">
-                  <p><b>Criterion:</b> {verdict.criterion}</p>
-                  <p><b>Tender source:</b> {citation(verdict.tender_source)}</p>
-                  <p><b>Bidder source:</b> {citation(verdict.bidder_source)}</p>
-                  <p><b>Rule trace:</b> {verdict.rule_trace}</p>
-                  {verdict.manual_review_reason && <p><b>Manual review:</b> {verdict.manual_review_reason}</p>}
-                </div>
-              </details>
-            ))}
-          </div>
-          {bidder.review_tasks?.length > 0 && (
-            <div className="review-list">
-              {bidder.review_tasks.map((task) => (
-                <p key={`${task.task_id}-${task.reason}`}><AlertTriangle size={15} /> {task.reason}</p>
-              ))}
+      {result.bidders.map((bidder) => {
+        const rejected = gstinRejected(bidder);
+        return (
+          <article className={`bidder-card${rejected ? ' gstin-rejected' : ''}`} key={bidder.bidder}>
+            <div className="bidder-head">
+              <h3>{bidder.bidder}</h3>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span className={`status ${statusClass(bidder.overall_status)}`}>{bidder.overall_status}</span>
+                <a
+                  className="report-dl-btn"
+                  href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/bidders/${encodeURIComponent(bidder.bidder)}/rejection-report`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Download adjudication report"
+                >
+                  <Download size={13} /> Report
+                </a>
+              </div>
             </div>
-          )}
-        </article>
-      ))}
+
+            {rejected && (
+              <div className="gstin-rejection-banner">
+                <ShieldX size={16} />
+                <span>
+                  {bidder.gstin_check.check_status === 'flagged'
+                    ? 'Vendor flagged — not permitted to bid'
+                    : 'Invalid GSTIN — bid rejected'}
+                  {bidder.gstin_check.gstin && (
+                    <> &middot; GSTIN: <strong>{bidder.gstin_check.gstin}</strong></>
+                  )}
+                </span>
+                <p className="gstin-rejection-reason">{bidder.gstin_check.rejection_reason}</p>
+              </div>
+            )}
+
+            {!rejected && (
+              <div className="verdict-table">
+                {bidder.verdicts.map((verdict) => (
+                  <details className="verdict-row" key={verdict.criterion_id}>
+                    <summary>
+                      <strong>{verdict.criterion_id}</strong>
+                      <span className={`status ${statusClass(verdict.status)}`}>{verdict.status}</span>
+                      <span>{verdict.extracted_value || 'No value'}</span>
+                      <p>{verdict.reason}</p>
+                    </summary>
+                    <div className="explanation">
+                      <p><b>Criterion:</b> {verdict.criterion}</p>
+                      <p><b>Tender source:</b> {citation(verdict.tender_source)}</p>
+                      <p><b>Bidder source:</b> {citation(verdict.bidder_source)}</p>
+                      <p><b>Rule trace:</b> {verdict.rule_trace}</p>
+                      {verdict.manual_review_reason && <p><b>Manual review:</b> {verdict.manual_review_reason}</p>}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            )}
+
+            {!rejected && bidder.review_tasks?.length > 0 && (
+              <div className="review-list">
+                {bidder.review_tasks.map((task) => (
+                  <p key={`${task.task_id}-${task.reason}`}><AlertTriangle size={15} /> {task.reason}</p>
+                ))}
+              </div>
+            )}
+          </article>
+        );
+      })}
     </div>
   );
 }
