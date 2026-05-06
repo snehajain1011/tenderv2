@@ -6,3 +6,6 @@ outputs/
 *.sqlite
 frontend/node_modules/
 frontend/dist/
+.venv/
+.env
+.claude/
