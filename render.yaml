@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: tenderv2-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: CORS_ORIGINS
+        value: https://frontend-dusky-two-75.vercel.app,https://frontend-hw1a5wztu-snehajain1011s-projects.vercel.app,http://localhost:5173,http://127.0.0.1:5173
+      - key: PROCUREMENT_DB_PATH
+        value: outputs/procurement.sqlite

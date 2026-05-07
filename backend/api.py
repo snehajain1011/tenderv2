@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import logging
 import sys
 from pathlib import Path
@@ -25,11 +26,22 @@ except ImportError:  # pragma: no cover - lets the core CLI run without web deps
     HTTPException = Exception
 
 
+def _cors_origins() -> list[str]:
+    configured = os.getenv("CORS_ORIGINS", "")
+    origins = [item.strip() for item in configured.split(",") if item.strip()]
+    return origins or [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://frontend-dusky-two-75.vercel.app",
+        "https://frontend-hw1a5wztu-snehajain1011s-projects.vercel.app",
+    ]
+
+
 if FastAPI:
     app = FastAPI(title="Procurement AI Platform", version="0.2.0")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_origins=_cors_origins(),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

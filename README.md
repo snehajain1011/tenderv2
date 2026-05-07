@@ -241,3 +241,28 @@ Click **Evaluate** in the app, or run `python main.py --workspace ...` from the 
 - **Deployment:** Docker Compose (API + Frontend + PostgreSQL)
 - **Fraud detection:** SHA-256 document fingerprinting, statistical bid analysis
 - **Audit:** Append-only JSONL event log
+
+## Render Backend Deployment
+
+The repo includes `render.yaml` for deploying the FastAPI backend as a Render web service.
+
+Render settings:
+
+```text
+Service name: tenderv2-api
+Runtime: Python
+Plan: free
+Build command: pip install -r requirements.txt
+Start command: uvicorn api:app --host 0.0.0.0 --port $PORT
+Health check: /health
+```
+
+The free/basic setup uses Render's ephemeral filesystem. Uploaded tender/bid files and generated reports can disappear on restart or redeploy, which is acceptable for demo use. Structured data falls back to SQLite at `outputs/procurement.sqlite` unless `DATABASE_URL` is provided.
+
+After Render creates the backend, set the Vercel frontend environment variable:
+
+```text
+VITE_API_URL=https://<your-render-service>.onrender.com
+```
+
+Then redeploy the Vercel frontend so the portal calls the hosted Render API instead of local `127.0.0.1`.
