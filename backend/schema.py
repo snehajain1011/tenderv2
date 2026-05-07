@@ -138,11 +138,25 @@ class ReviewTask:
 
 
 @dataclass(frozen=True)
+class GstinCheck:
+    gstin: str
+    legal_name: str
+    is_valid: bool
+    is_active: bool
+    # "invalid" → rejected immediately (missing, bad, or inactive GSTIN)
+    # "flagged" → rejected due to negative procurement history in DB
+    # "clear"   → passes both gates, proceed to criteria evaluation
+    check_status: str
+    rejection_reason: str
+
+
+@dataclass(frozen=True)
 class BidderResult:
     bidder: str
     overall_status: OverallStatus
     verdicts: list[Verdict]
     review_tasks: list[ReviewTask] = field(default_factory=list)
+    gstin_check: GstinCheck | None = None
 
 
 @dataclass(frozen=True)
@@ -156,6 +170,24 @@ class AgentDefinition:
 
 
 @dataclass(frozen=True)
+class BidderQualityReport:
+    overall_score: int        # 0–100, higher = more ambiguous / riskier
+    grade: str                # A B C D F
+    flagged_criteria: list[dict]  # [{id, description, score, flags, mandatory}]
+    summary: str
+
+
+@dataclass(frozen=True)
+class RiskSignal:
+    signal_type: str          # similar_bids | document_reuse | low_bid_outlier | …
+    severity: str             # high | medium | low
+    title: str
+    description: str
+    affected_bidders: list[str]
+    evidence: str
+
+
+@dataclass(frozen=True)
 class EvaluationResult:
     tender_id: str
     criteria: list[Criterion]
@@ -163,6 +195,30 @@ class EvaluationResult:
     agents: list[AgentDefinition]
     final_accuracy_gate_passed: bool
     final_accuracy_issues: list[str]
+    bidder_quality: BidderQualityReport | None = None
+    risk_signals: list[RiskSignal] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class CriterionChange:
+    criterion_id: str
+    change_type: str          # "added" | "removed" | "modified"
+    description: str          # human-readable criterion description
+    field: str = ""           # which field changed (for "modified")
+    old_value: str = ""
+    new_value: str = ""
+
+
+@dataclass(frozen=True)
+class CorrigendumReport:
+    tender_id: str
+    detected_at: str          # ISO-8601 timestamp
+    added: list[CriterionChange]
+    removed: list[CriterionChange]
+    modified: list[CriterionChange]
+    affected_bidders: list[str]
+    requires_full_reeval: bool
+    summary: str
 
 
 @dataclass(frozen=True)

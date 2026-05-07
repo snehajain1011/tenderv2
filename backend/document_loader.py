@@ -326,10 +326,25 @@ def _text_density(text: str, page_count: int) -> float:
     return len(re.findall(r"\w+", text)) / max(page_count, 1)
 
 
+_CURRENCY_PATTERN = re.compile(
+    r"(?:"
+    r"Rs\.?|INR|₹"           # Indian Rupee
+    r"|USD|\$"               # US Dollar
+    r"|EUR|€"                # Euro
+    r"|GBP|£"                # British Pound
+    r"|JPY|¥"                # Japanese Yen / Chinese Yuan
+    r"|CNY|RMB"              # Chinese Yuan
+    r"|AED|AUD|CAD|CHF"      # UAE Dirham, Australian/Canadian Dollar, Swiss Franc
+    r"|SGD|MYR|BDT|PKR|LKR"  # SE Asia / South Asia
+    r")\s*[0-9]",
+    re.IGNORECASE,
+)
+
+
 def _tables_detected(text: str) -> int:
     rows = 0
     for line in text.splitlines():
-        has_money = bool(re.search(r"(?:Rs\.?|INR)\s*[0-9]", line, re.IGNORECASE))
+        has_money = bool(_CURRENCY_PATTERN.search(line))
         has_columns = line.count("|") >= 2 or len(re.findall(r"\s{2,}", line)) >= 2
         if has_money or has_columns:
             rows += 1

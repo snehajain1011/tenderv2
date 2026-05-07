@@ -140,6 +140,9 @@ class ProcurementRepository:
         self._add_column("review_tasks", "extracted_value", "TEXT NOT NULL DEFAULT ''")
         self._add_column("review_tasks", "confidence", "DOUBLE PRECISION NOT NULL DEFAULT 0" if self.is_postgres else "REAL NOT NULL DEFAULT 0")
         self._add_column("review_tasks", "suggested_action", "TEXT NOT NULL DEFAULT ''")
+        # GSTIN flag columns — added for negative-history tracking
+        self._add_column("vendors", "flagged", "BOOLEAN NOT NULL DEFAULT FALSE" if self.is_postgres else "INTEGER NOT NULL DEFAULT 0")
+        self._add_column("vendors", "flagged_reason", "TEXT NOT NULL DEFAULT ''")
 
     def _add_column(self, table: str, column: str, definition: str) -> None:
         if self.is_postgres:
@@ -195,6 +198,16 @@ class ProcurementRepository:
             [tender_pk, workspace_name, workspace_name, "evaluated", str(workspace_path)],
         )
         return tender_pk
+
+    def is_vendor_flagged(self, gstin: str) -> bool:
+        """Return True if the given GSTIN is flagged in the vendors table."""
+        row = self._fetch_one("SELECT flagged FROM vendors WHERE gstin = {p}", [gstin])
+        return bool(row[0]) if row else False
+
+    def get_vendor_flag_reason(self, gstin: str) -> str:
+        """Return the flag reason for the given GSTIN, or empty string."""
+        row = self._fetch_one("SELECT flagged_reason FROM vendors WHERE gstin = {p}", [gstin])
+        return row[0] if row else ""
 
     def _upsert_vendor(self, bidder: str) -> str:
         existing = self._fetch_one("SELECT id FROM vendors WHERE legal_name = {p}", [bidder])

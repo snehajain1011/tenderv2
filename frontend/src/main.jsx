@@ -36,6 +36,7 @@ function App() {
   const [report, setReport] = useState('');
   const [auditEvents, setAuditEvents] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [corrigendum, setCorrigendum] = useState(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('Ready');
 
@@ -98,6 +99,10 @@ function App() {
         const vendorData = await request(`${API}/workspaces/${encodeURIComponent(workspace)}/vendor-directory`);
         setVendors(vendorData.vendors || []);
       } catch { /* vendor directory may not exist yet */ }
+      try {
+        const corrigendumData = await request(`${API}/workspaces/${encodeURIComponent(workspace)}/corrigendum`);
+        setCorrigendum(corrigendumData);
+      } catch { /* corrigendum endpoint optional */ }
       setMessage(`Evaluation complete. Final accuracy gate ${data.final_accuracy_gate_passed ? 'passed' : 'failed'}.`);
     } catch (error) {
       setMessage(error.message);
@@ -189,6 +194,10 @@ function App() {
           <button className={activeView === 'audit' ? 'active' : ''} onClick={() => setActiveView('audit')}>
             <BookOpen size={18} /> Audit Trail
           </button>
+          <button className={activeView === 'amendments' ? 'active' : ''} onClick={() => setActiveView('amendments')} style={corrigendum?.has_changes ? {color:'var(--warn)'} : {}}>
+            <AlertTriangle size={18} /> Amendments
+            {corrigendum?.has_changes && <span className="badge-dot" />}
+          </button>
         </nav>
       </aside>
 
@@ -213,6 +222,7 @@ function App() {
         {activeView === 'reports' && <ReportView report={report} result={result} />}
         {activeView === 'directory' && <VendorDirectoryView vendors={vendors} workspace={workspace} />}
         {activeView === 'audit' && <AuditTrailView events={auditEvents} />}
+        {activeView === 'amendments' && <AmendmentsView corrigendum={corrigendum} />}
       </section>
     </main>
   );
@@ -300,6 +310,24 @@ function ReviewView({ metrics, result, flow }) {
         <Metric icon={<AlertTriangle />} label="Manual Review" value={metrics.review} />
         <Metric icon={<BarChart3 />} label="Final Gate" value={metrics.finalGate} />
       </section>
+
+      {result && (
+        <section className="panel" style={{ padding: '12px 18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <h3 style={{ margin: 0 }}>Evaluation Checklist / Matrix</h3>
+              <p className="muted" style={{ margin: '2px 0 0', fontSize: '0.82rem' }}>Download a structured CSV with all criteria and per-bidder verdicts for offline review.</p>
+            </div>
+            <a
+              className="checklist-export-btn"
+              href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/checklist.csv`}
+              download
+            >
+              <Download size={15} /> Export Checklist CSV
+            </a>
+          </div>
+        </section>
+      )}
 
       {result?.bidder_quality && <BidderQualityPanel quality={result.bidder_quality} />}
       {result?.risk_signals?.length > 0 && <RiskIntelligencePanel signals={result.risk_signals} />}
@@ -461,6 +489,90 @@ function ReportView({ report, result }) {
       )}
       {report && mode === 'raw' && (
         <pre className="report-preview">{report}</pre>
+      )}
+    </section>
+  );
+}
+
+function AmendmentsView({ corrigendum }) {
+  if (!corrigendum) {
+    return (
+      <section className="panel">
+        <h2>Tender Amendments (Corrigendum)</h2>
+        <div className="empty">Run an evaluation to check for criteria changes since the last run.</div>
+      </section>
+    );
+  }
+  if (!corrigendum.has_changes) {
+    return (
+      <section className="panel">
+        <h2>Tender Amendments (Corrigendum)</h2>
+        <div className="empty">{corrigendum.message || 'No criteria changes detected. Tender is unchanged since last evaluation.'}</div>
+      </section>
+    );
+  }
+  const { added = [], removed = [], modified = [], affected_bidders = [], requires_full_reeval, summary, detected_at } = corrigendum;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>Tender Amendments (Corrigendum)</h2>
+          <p>Changes detected between the previous and current evaluation run.</p>
+        </div>
+        {requires_full_reeval && (
+          <span className="status fail" style={{ alignSelf: 'center' }}>Re-evaluation required</span>
+        )}
+      </div>
+      <div className="corrigendum-summary">
+        <AlertTriangle size={16} />
+        <span>{summary}</span>
+        {detected_at && <span className="muted" style={{ marginLeft: 'auto', fontSize: '0.78rem' }}>{new Date(detected_at).toLocaleString()}</span>}
+      </div>
+      {added.length > 0 && (
+        <div className="corrigendum-section">
+          <h3><span className="status pass">Added ({added.length})</span></h3>
+          <table className="corrigendum-table">
+            <thead><tr><th>ID</th><th>Description</th></tr></thead>
+            <tbody>{added.map((c) => (
+              <tr key={c.criterion_id}><td><code>{c.criterion_id}</code></td><td>{c.description}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+      {removed.length > 0 && (
+        <div className="corrigendum-section">
+          <h3><span className="status fail">Removed ({removed.length})</span></h3>
+          <table className="corrigendum-table">
+            <thead><tr><th>ID</th><th>Description</th></tr></thead>
+            <tbody>{removed.map((c) => (
+              <tr key={c.criterion_id}><td><code>{c.criterion_id}</code></td><td>{c.description}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+      {modified.length > 0 && (
+        <div className="corrigendum-section">
+          <h3><span className="status review">Modified ({modified.length})</span></h3>
+          <table className="corrigendum-table">
+            <thead><tr><th>ID</th><th>Field</th><th>Previous</th><th>Current</th></tr></thead>
+            <tbody>{modified.map((c, i) => (
+              <tr key={`${c.criterion_id}-${i}`}>
+                <td><code>{c.criterion_id}</code></td>
+                <td>{c.field}</td>
+                <td className="corrigendum-old">{c.old_value}</td>
+                <td className="corrigendum-new">{c.new_value}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+      {affected_bidders.length > 0 && (
+        <div className="corrigendum-section">
+          <h3>Affected Bidders</h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {affected_bidders.map((b) => <span key={b} className="status review">{b}</span>)}
+          </div>
+        </div>
       )}
     </section>
   );

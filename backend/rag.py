@@ -126,7 +126,8 @@ def _page_number(text: str) -> int:
 
 
 def _vector(text: str) -> Counter[str]:
-    return Counter(re.findall(r"[a-z0-9]+", text.lower()))
+    # \w+ with UNICODE flag captures Latin, Devanagari, Arabic, CJK, etc.
+    return Counter(re.findall(r"\w+", text.lower(), re.UNICODE))
 
 
 def _cosine(a: Counter[str], b: Counter[str]) -> float:

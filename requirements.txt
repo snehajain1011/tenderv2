@@ -11,3 +11,5 @@ pillow
 rapidocr-onnxruntime
 # pytesseract
 # docling
+requests
+python-dotenv

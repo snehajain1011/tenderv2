@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS vendors (
     pan TEXT,
     msme_status TEXT,
     debarment_declaration BOOLEAN,
+    flagged BOOLEAN NOT NULL DEFAULT FALSE,
+    flagged_reason TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
