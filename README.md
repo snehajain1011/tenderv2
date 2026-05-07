@@ -1,12 +1,12 @@
-# TenderAI — Smart Procurement Evaluation Platform
+# ProcureIQ — Smart Procurement Evaluation Platform
 
 ## What Is This?
 
-TenderAI is an AI-powered platform that automates the most time-consuming and error-prone parts of government and corporate procurement — evaluating bids.
+ProcureIQ is an AI-powered platform that automates the most time-consuming and error-prone parts of government and corporate procurement — evaluating bids.
 
 Today, procurement officers spend weeks manually reading through hundreds of pages of bidder documents, checking whether each vendor meets eligibility requirements, spotting fraud, and writing justification reports. This process is slow, inconsistent, and vulnerable to human error or bias.
 
-**TenderAI does all of that automatically.** You upload the tender document and the bidders' submissions, click Evaluate, and get a complete, auditable result in minutes — with every decision explained and backed by the exact text from the documents.
+**ProcureIQ does all of that automatically.** You upload the tender document and the bidders' submissions, click Evaluate, and get a complete, auditable result in minutes — with every decision explained and backed by the exact text from the documents.
 
 ---
 
