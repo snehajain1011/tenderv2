@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import { marked } from 'marked';
+import React, { useEffect, useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { marked } from "marked";
 import {
   AlertTriangle,
   BarChart3,
@@ -22,23 +22,23 @@ import {
   Users,
   UserPlus,
   Zap,
-} from 'lucide-react';
-import './styles.css';
+} from "lucide-react";
+import "./styles.css";
 
-const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 function App() {
-  const [activeView, setActiveView] = useState('pre');
-  const [workspace, setWorkspace] = useState('demo');
-  const [vendorName, setVendorName] = useState('');
+  const [activeView, setActiveView] = useState("pre");
+  const [workspace, setWorkspace] = useState("demo");
+  const [vendorName, setVendorName] = useState("");
   const [flow, setFlow] = useState(null);
   const [result, setResult] = useState(null);
-  const [report, setReport] = useState('');
+  const [report, setReport] = useState("");
   const [auditEvents, setAuditEvents] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [corrigendum, setCorrigendum] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('Ready');
+  const [message, setMessage] = useState("Ready");
 
   const metrics = useMemo(() => summarize(result), [result]);
   const award = useMemo(() => awardRecommendation(result), [result]);
@@ -48,18 +48,20 @@ function App() {
   }, []);
 
   async function loadFlow(name = workspace) {
-    const data = await request(`${API}/workspaces/${encodeURIComponent(name)}/procurement-flow`);
+    const data = await request(
+      `${API}/workspaces/${encodeURIComponent(name)}/procurement-flow`,
+    );
     setFlow(data);
   }
 
   async function createDemo() {
     setBusy(true);
-    setMessage('Creating sandbox workspace...');
+    setMessage("Creating sandbox workspace...");
     try {
-      await request(`${API}/workspaces/demo`, { method: 'POST' });
-      setWorkspace('demo');
-      await loadFlow('demo');
-      setMessage('Demo workspace created.');
+      await request(`${API}/workspaces/demo`, { method: "POST" });
+      setWorkspace("demo");
+      await loadFlow("demo");
+      setMessage("Demo workspace created.");
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -69,9 +71,11 @@ function App() {
 
   async function createWorkspace() {
     setBusy(true);
-    setMessage('Creating workspace...');
+    setMessage("Creating workspace...");
     try {
-      await request(`${API}/workspaces/${encodeURIComponent(workspace)}`, { method: 'POST' });
+      await request(`${API}/workspaces/${encodeURIComponent(workspace)}`, {
+        method: "POST",
+      });
       await loadFlow(workspace);
       setMessage(`Workspace ${workspace} is ready.`);
     } catch (error) {
@@ -83,27 +87,47 @@ function App() {
 
   async function evaluateWorkspace() {
     setBusy(true);
-    setMessage('Running bid review, comparisons, and explainability gates...');
+    setMessage("Running bid review, comparisons, and explainability gates...");
     try {
-      const data = await request(`${API}/workspaces/${encodeURIComponent(workspace)}/evaluate`, { method: 'POST' });
+      const data = await request(
+        `${API}/workspaces/${encodeURIComponent(workspace)}/evaluate`,
+        { method: "POST" },
+      );
       setResult(data);
       await loadFlow(workspace);
-      const md = await fetch(`${API}/workspaces/${encodeURIComponent(workspace)}/reports/evaluation_report.md`).then((res) => res.text());
+      const md = await fetch(
+        `${API}/workspaces/${encodeURIComponent(workspace)}/reports/evaluation_report.md`,
+      ).then((res) => res.text());
       setReport(md);
       // Load audit trail and vendor directory after evaluation
       try {
-        const auditData = await request(`${API}/workspaces/${encodeURIComponent(workspace)}/audit-trail`);
+        const auditData = await request(
+          `${API}/workspaces/${encodeURIComponent(workspace)}/audit-trail`,
+        );
         setAuditEvents(auditData.events || []);
-      } catch { /* audit log may not exist yet */ }
+      } catch {
+        /* audit log may not exist yet */
+      }
       try {
-        const vendorData = await request(`${API}/workspaces/${encodeURIComponent(workspace)}/vendor-directory`);
+        const vendorData = await request(
+          `${API}/workspaces/${encodeURIComponent(workspace)}/vendor-directory`,
+        );
         setVendors(vendorData.vendors || []);
-      } catch { /* vendor directory may not exist yet */ }
+      } catch {
+        /* vendor directory may not exist yet */
+      }
       try {
-        const corrigendumData = await request(`${API}/workspaces/${encodeURIComponent(workspace)}/corrigendum`);
+        const corrigendumData = await request(
+          `${API}/workspaces/${encodeURIComponent(workspace)}/corrigendum`,
+        );
         setCorrigendum(corrigendumData);
-      } catch { /* corrigendum endpoint optional */ }
-      setMessage(`Evaluation complete. Final accuracy gate ${data.final_accuracy_gate_passed ? 'passed' : 'failed'}.`);
+      } catch {
+        /* no corrigendum on first run */
+        setCorrigendum(null);
+      }
+      setMessage(
+        `Evaluation complete. Final accuracy gate ${data.final_accuracy_gate_passed ? "passed" : "failed"}.`,
+      );
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -114,9 +138,12 @@ function App() {
   async function uploadTender(files) {
     if (!files?.length) return;
     setBusy(true);
-    setMessage('Uploading tender package...');
+    setMessage("Uploading tender package...");
     try {
-      await uploadFiles(`${API}/workspaces/${encodeURIComponent(workspace)}/tender-documents`, files);
+      await uploadFiles(
+        `${API}/workspaces/${encodeURIComponent(workspace)}/tender-documents`,
+        files,
+      );
       await loadFlow(workspace);
       setMessage(`${files.length} tender document(s) uploaded.`);
     } catch (error) {
@@ -128,15 +155,18 @@ function App() {
 
   async function importTenderUrl(url) {
     if (!url.trim()) {
-      setMessage('Enter a public tender PDF/document URL first.');
+      setMessage("Enter a public tender PDF/document URL first.");
       return;
     }
     setBusy(true);
-    setMessage('Importing tender from public URL...');
+    setMessage("Importing tender from public URL...");
     try {
-      await request(`${API}/workspaces/${encodeURIComponent(workspace)}/tender-url?url=${encodeURIComponent(url)}`, { method: 'POST' });
+      await request(
+        `${API}/workspaces/${encodeURIComponent(workspace)}/tender-url?url=${encodeURIComponent(url)}`,
+        { method: "POST" },
+      );
       await loadFlow(workspace);
-      setMessage('Tender URL imported into this workspace.');
+      setMessage("Tender URL imported into this workspace.");
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -146,15 +176,20 @@ function App() {
 
   async function uploadVendor(files) {
     if (!files?.length || !vendorName.trim()) {
-      setMessage('Enter vendor name before uploading bidder documents.');
+      setMessage("Enter vendor name before uploading bidder documents.");
       return;
     }
     setBusy(true);
-    setMessage('Collecting bidder submission...');
+    setMessage("Collecting bidder submission...");
     try {
-      await uploadFiles(`${API}/workspaces/${encodeURIComponent(workspace)}/vendors/${encodeURIComponent(vendorName)}/documents`, files);
+      await uploadFiles(
+        `${API}/workspaces/${encodeURIComponent(workspace)}/vendors/${encodeURIComponent(vendorName)}/documents`,
+        files,
+      );
       await loadFlow(workspace);
-      setMessage(`${files.length} bidder document(s) uploaded for ${vendorName}.`);
+      setMessage(
+        `${files.length} bidder document(s) uploaded for ${vendorName}.`,
+      );
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -168,33 +203,57 @@ function App() {
         <div className="brand">
           <ShieldCheck size={28} />
           <div>
-            <h1>Procurement AI</h1>
+            <h1>ProcureIQ</h1>
             <p>Government tender operations</p>
           </div>
         </div>
         <nav>
-          <button className={activeView === 'pre' ? 'active' : ''} onClick={() => setActiveView('pre')}>
+          <button
+            className={activeView === "pre" ? "active" : ""}
+            onClick={() => setActiveView("pre")}
+          >
             <FileCheck2 size={18} /> Pre-Tender
           </button>
-          <button className={activeView === 'vendor' ? 'active' : ''} onClick={() => setActiveView('vendor')}>
+          <button
+            className={activeView === "vendor" ? "active" : ""}
+            onClick={() => setActiveView("vendor")}
+          >
             <UserPlus size={18} /> Vendor Submission
           </button>
-          <button className={activeView === 'review' ? 'active' : ''} onClick={() => setActiveView('review')}>
+          <button
+            className={activeView === "review" ? "active" : ""}
+            onClick={() => setActiveView("review")}
+          >
             <ClipboardList size={18} /> Bid Review
           </button>
-          <button className={activeView === 'award' ? 'active' : ''} onClick={() => setActiveView('award')}>
+          <button
+            className={activeView === "award" ? "active" : ""}
+            onClick={() => setActiveView("award")}
+          >
             <Gavel size={18} /> Award
           </button>
-          <button className={activeView === 'reports' ? 'active' : ''} onClick={() => setActiveView('reports')}>
+          <button
+            className={activeView === "reports" ? "active" : ""}
+            onClick={() => setActiveView("reports")}
+          >
             <FileText size={18} /> Reports
           </button>
-          <button className={activeView === 'directory' ? 'active' : ''} onClick={() => setActiveView('directory')}>
+          <button
+            className={activeView === "directory" ? "active" : ""}
+            onClick={() => setActiveView("directory")}
+          >
             <Database size={18} /> Vendor Directory
           </button>
-          <button className={activeView === 'audit' ? 'active' : ''} onClick={() => setActiveView('audit')}>
+          <button
+            className={activeView === "audit" ? "active" : ""}
+            onClick={() => setActiveView("audit")}
+          >
             <BookOpen size={18} /> Audit Trail
           </button>
-          <button className={activeView === 'amendments' ? 'active' : ''} onClick={() => setActiveView('amendments')} style={corrigendum?.has_changes ? {color:'var(--warn)'} : {}}>
+          <button
+            className={activeView === "amendments" ? "active" : ""}
+            onClick={() => setActiveView("amendments")}
+          >
             <AlertTriangle size={18} /> Amendments
             {corrigendum?.has_changes && <span className="badge-dot" />}
           </button>
@@ -206,65 +265,123 @@ function App() {
           <div>
             <p className="eyebrow">Workspace</p>
             <div className="workspace-row">
-              <input value={workspace} onChange={(event) => setWorkspace(event.target.value)} />
-              <button onClick={createWorkspace} disabled={busy}><FolderUp size={17} /> Create</button>
-              <button onClick={createDemo} disabled={busy}><FileCheck2 size={17} /> Demo</button>
-              <button className="primary" onClick={evaluateWorkspace} disabled={busy}><RefreshCw size={17} /> Evaluate</button>
+              <input
+                value={workspace}
+                onChange={(event) => setWorkspace(event.target.value)}
+              />
+              <button onClick={createWorkspace} disabled={busy}>
+                <FolderUp size={17} /> Create
+              </button>
+              <button onClick={createDemo} disabled={busy}>
+                <FileCheck2 size={17} /> Demo
+              </button>
+              <button
+                className="primary"
+                onClick={evaluateWorkspace}
+                disabled={busy}
+              >
+                <RefreshCw size={17} /> Evaluate
+              </button>
             </div>
           </div>
           <StatusPill message={message} busy={busy} />
         </header>
 
-        {activeView === 'pre' && <PreTenderView flow={flow} onTenderUpload={uploadTender} onTenderUrl={importTenderUrl} busy={busy} />}
-        {activeView === 'vendor' && <VendorView flow={flow} vendorName={vendorName} setVendorName={setVendorName} onUpload={uploadVendor} busy={busy} />}
-        {activeView === 'review' && <ReviewView metrics={metrics} result={result} flow={flow} />}
-        {activeView === 'award' && <AwardView award={award} result={result} />}
-        {activeView === 'reports' && <ReportView report={report} result={result} />}
-        {activeView === 'directory' && <VendorDirectoryView vendors={vendors} workspace={workspace} />}
-        {activeView === 'audit' && <AuditTrailView events={auditEvents} />}
-        {activeView === 'amendments' && <AmendmentsView corrigendum={corrigendum} />}
+        {activeView === "pre" && (
+          <PreTenderView
+            flow={flow}
+            onTenderUpload={uploadTender}
+            onTenderUrl={importTenderUrl}
+            busy={busy}
+          />
+        )}
+        {activeView === "vendor" && (
+          <VendorView
+            flow={flow}
+            vendorName={vendorName}
+            setVendorName={setVendorName}
+            onUpload={uploadVendor}
+            busy={busy}
+          />
+        )}
+        {activeView === "review" && (
+          <ReviewView metrics={metrics} result={result} flow={flow} />
+        )}
+        {activeView === "award" && <AwardView award={award} result={result} />}
+        {activeView === "reports" && (
+          <ReportView report={report} result={result} />
+        )}
+        {activeView === "directory" && (
+          <VendorDirectoryView vendors={vendors} workspace={workspace} />
+        )}
+        {activeView === "audit" && <AuditTrailView events={auditEvents} />}
+        {activeView === "amendments" && (
+          <AmendmentsView corrigendum={corrigendum} workspace={workspace} />
+        )}
       </section>
     </main>
   );
 }
 
 function PreTenderView({ flow, onTenderUpload, onTenderUrl, busy }) {
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState("");
   return (
     <>
       <section className="panel">
         <div className="panel-head">
           <div>
             <h2>Prepare Tender Package</h2>
-            <p>Collect technical specs, quantity, budget, delivery terms, eligibility criteria, and contract conditions.</p>
+            <p>
+              Collect technical specs, quantity, budget, delivery terms,
+              eligibility criteria, and contract conditions.
+            </p>
           </div>
           <label className="upload-button">
             <Upload size={17} />
             Upload Tender
-            <input type="file" multiple disabled={busy} onChange={(event) => onTenderUpload(event.target.files)} />
+            <input
+              type="file"
+              multiple
+              disabled={busy}
+              onChange={(event) => onTenderUpload(event.target.files)}
+            />
           </label>
         </div>
         <StepList steps={flow?.pre_tender || []} />
       </section>
       <section className="panel">
         <h2>Import Public Tender URL</h2>
-        <p className="muted">Use this for public CRPF/CPPP/Gem tender PDFs or redacted sandbox documents.</p>
+        <p className="muted">
+          Use this for public CRPF/CPPP/Gem tender PDFs or redacted sandbox
+          documents.
+        </p>
         <div className="url-row">
-          <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.gov.in/tender.pdf" />
-          <button onClick={() => onTenderUrl(url)} disabled={busy}><Download size={17} /> Import</button>
+          <input
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="https://example.gov.in/tender.pdf"
+          />
+          <button onClick={() => onTenderUrl(url)} disabled={busy}>
+            <Download size={17} /> Import
+          </button>
         </div>
       </section>
       <section className="panel">
         <h2>Publication Readiness</h2>
-        <p className="muted">Use this checklist before putting the tender on GeM / e-tender portal and making it available to vendors.</p>
-        <Checklist items={[
-          'Tender package uploaded and versioned',
-          'Technical specifications captured',
-          'Quantity, budget, and delivery terms captured',
-          'Eligibility criteria captured',
-          'Contract terms and conditions captured',
-          'Audit trail and source hashes preserved',
-        ]} />
+        <p className="muted">
+          Use this checklist before putting the tender on GeM / e-tender portal
+          and making it available to vendors.
+        </p>
+        <Checklist
+          items={[
+            "Tender package uploaded and versioned",
+            "Technical specifications captured",
+            "Quantity, budget, and delivery terms captured",
+            "Eligibility criteria captured",
+            "Contract terms and conditions captured",
+            "Audit trail and source hashes preserved",
+          ]}
+        />
       </section>
     </>
   );
@@ -278,18 +395,30 @@ function VendorView({ flow, vendorName, setVendorName, onUpload, busy }) {
         <div className="panel-head">
           <div>
             <h2>Vendor Registration And Submission</h2>
-            <p>Collect quotations, proposals, certificates, technical bid, and financial bid into the selected workspace.</p>
+            <p>
+              Collect quotations, proposals, certificates, technical bid, and
+              financial bid into the selected workspace.
+            </p>
           </div>
         </div>
         <div className="form-grid">
           <label>
             Vendor name
-            <input value={vendorName} onChange={(event) => setVendorName(event.target.value)} placeholder="Example: Alpha Secure Systems" />
+            <input
+              value={vendorName}
+              onChange={(event) => setVendorName(event.target.value)}
+              placeholder="Example: Alpha Secure Systems"
+            />
           </label>
           <label className="dropzone">
             <Upload size={24} />
             <span>Upload bidder documents</span>
-            <input type="file" multiple disabled={busy} onChange={(event) => onUpload(event.target.files)} />
+            <input
+              type="file"
+              multiple
+              disabled={busy}
+              onChange={(event) => onUpload(event.target.files)}
+            />
           </label>
         </div>
       </section>
@@ -306,31 +435,29 @@ function ReviewView({ metrics, result, flow }) {
     <>
       <section className="metrics">
         <Metric icon={<Gavel />} label="Bidders" value={metrics.bidders} />
-        <Metric icon={<CheckCircle2 />} label="Eligible" value={metrics.eligible} />
-        <Metric icon={<AlertTriangle />} label="Manual Review" value={metrics.review} />
-        <Metric icon={<BarChart3 />} label="Final Gate" value={metrics.finalGate} />
+        <Metric
+          icon={<CheckCircle2 />}
+          label="Eligible"
+          value={metrics.eligible}
+        />
+        <Metric
+          icon={<AlertTriangle />}
+          label="Manual Review"
+          value={metrics.review}
+        />
+        <Metric
+          icon={<BarChart3 />}
+          label="Final Gate"
+          value={metrics.finalGate}
+        />
       </section>
 
-      {result && (
-        <section className="panel" style={{ padding: '12px 18px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-            <div>
-              <h3 style={{ margin: 0 }}>Evaluation Checklist / Matrix</h3>
-              <p className="muted" style={{ margin: '2px 0 0', fontSize: '0.82rem' }}>Download a structured CSV with all criteria and per-bidder verdicts for offline review.</p>
-            </div>
-            <a
-              className="checklist-export-btn"
-              href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/checklist.csv`}
-              download
-            >
-              <Download size={15} /> Export Checklist CSV
-            </a>
-          </div>
-        </section>
+      {result?.bidder_quality && (
+        <BidderQualityPanel quality={result.bidder_quality} />
       )}
-
-      {result?.bidder_quality && <BidderQualityPanel quality={result.bidder_quality} />}
-      {result?.risk_signals?.length > 0 && <RiskIntelligencePanel signals={result.risk_signals} />}
+      {result?.risk_signals?.length > 0 && (
+        <RiskIntelligencePanel signals={result.risk_signals} />
+      )}
 
       <section className="panel">
         <h2>Tendering Stage Workflow</h2>
@@ -340,8 +467,20 @@ function ReviewView({ metrics, result, flow }) {
         <div className="panel-head">
           <div>
             <h2>Bid Review And Comparison</h2>
-            <p>Price comparison, technical comparison, vendor qualification check, and review/POC coordination.</p>
+            <p>
+              Price comparison, technical comparison, vendor qualification
+              check, and review/POC coordination.
+            </p>
           </div>
+          {result && (
+            <a
+              className="checklist-export-btn"
+              href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/checklist.csv`}
+              download="evaluation_checklist.csv"
+            >
+              <Download size={15} /> Export Checklist CSV
+            </a>
+          )}
         </div>
         <BidderTable result={result} />
       </section>
@@ -350,17 +489,39 @@ function ReviewView({ metrics, result, flow }) {
 }
 
 function BidderQualityPanel({ quality }) {
-  const gradeColour = { A: '#166534', B: '#15803d', C: '#92400e', D: '#b45309', F: '#991b1b' };
-  const gradeBg     = { A: '#dcfce7', B: '#bbf7d0', C: '#fef3c7', D: '#fde68a', F: '#fee2e2' };
-  const colour = gradeColour[quality.grade] || '#374151';
-  const bg     = gradeBg[quality.grade]     || '#e5e7eb';
+  const gradeColour = {
+    A: "#166534",
+    B: "#15803d",
+    C: "#92400e",
+    D: "#b45309",
+    F: "#991b1b",
+  };
+  const gradeBg = {
+    A: "#dcfce7",
+    B: "#bbf7d0",
+    C: "#fef3c7",
+    D: "#fde68a",
+    F: "#fee2e2",
+  };
+  const colour = gradeColour[quality.grade] || "#374151";
+  const bg = gradeBg[quality.grade] || "#e5e7eb";
   const highRisk = quality.flagged_criteria.filter((c) => c.score >= 60);
   return (
     <section className="panel">
       <div className="panel-head">
         <div>
-          <h2><ShieldAlert size={17} style={{ verticalAlign: 'middle', marginRight: 6 }} />Bidder Ambiguity Scoring</h2>
-          <p className="muted">AI-scored criteria for vague thresholds, subjective language, and unverifiable clauses — surfaces risk in bidder submissions before evaluation.</p>
+          <h2>
+            <ShieldAlert
+              size={17}
+              style={{ verticalAlign: "middle", marginRight: 6 }}
+            />
+            Bidder Ambiguity Scoring
+          </h2>
+          <p className="muted">
+            AI-scored criteria for vague thresholds, subjective language, and
+            unverifiable clauses — surfaces risk in bidder submissions before
+            evaluation.
+          </p>
         </div>
         <div className="tq-grade" style={{ color: colour, background: bg }}>
           {quality.grade}
@@ -373,14 +534,29 @@ function BidderQualityPanel({ quality }) {
             <details key={c.id} className="tq-row">
               <summary>
                 <strong>{c.id}</strong>
-                <span className="tq-score" style={{ background: c.score >= 80 ? '#fee2e2' : '#fef3c7', color: c.score >= 80 ? '#991b1b' : '#92400e' }}>
+                <span
+                  className="tq-score"
+                  style={{
+                    background: c.score >= 80 ? "#fee2e2" : "#fef3c7",
+                    color: c.score >= 80 ? "#991b1b" : "#92400e",
+                  }}
+                >
                   {c.score}/100
                 </span>
-                <span>{c.description.slice(0, 90)}{c.description.length > 90 ? '…' : ''}</span>
-                {c.mandatory && <span className="chip-mandatory">Mandatory</span>}
+                <span>
+                  {c.description.slice(0, 90)}
+                  {c.description.length > 90 ? "…" : ""}
+                </span>
+                {c.mandatory && (
+                  <span className="chip-mandatory">Mandatory</span>
+                )}
               </summary>
               <div className="tq-flags">
-                {c.flags.map((f) => <span key={f} className="flag-chip">{f.replace(/_/g, ' ')}</span>)}
+                {c.flags.map((f) => (
+                  <span key={f} className="flag-chip">
+                    {f.replace(/_/g, " ")}
+                  </span>
+                ))}
               </div>
             </details>
           ))}
@@ -391,31 +567,55 @@ function BidderQualityPanel({ quality }) {
 }
 
 function RiskIntelligencePanel({ signals }) {
-  const sevColour = { high: ['#991b1b', '#fee2e2'], medium: ['#92400e', '#fef3c7'], low: ['#1e40af', '#dbeafe'] };
+  const sevColour = {
+    high: ["#991b1b", "#fee2e2"],
+    medium: ["#92400e", "#fef3c7"],
+    low: ["#1e40af", "#dbeafe"],
+  };
   return (
     <section className="panel">
       <div className="panel-head">
         <div>
-          <h2><Zap size={17} style={{ verticalAlign: 'middle', marginRight: 6 }} />Procurement Risk Intelligence</h2>
-          <p className="muted">Fraud and collusion signals detected across all bidder submissions.</p>
+          <h2>
+            <Zap
+              size={17}
+              style={{ verticalAlign: "middle", marginRight: 6 }}
+            />
+            Procurement Risk Intelligence
+          </h2>
+          <p className="muted">
+            Fraud and collusion signals detected across all bidder submissions.
+          </p>
         </div>
-        <span className={`status ${signals.some((s) => s.severity === 'high') ? 'fail' : 'review'}`}>
-          {signals.filter((s) => s.severity === 'high').length} High · {signals.filter((s) => s.severity === 'medium').length} Medium
+        <span
+          className={`status ${signals.some((s) => s.severity === "high") ? "fail" : "review"}`}
+        >
+          {signals.filter((s) => s.severity === "high").length} High ·{" "}
+          {signals.filter((s) => s.severity === "medium").length} Medium
         </span>
       </div>
       <div className="risk-list">
         {signals.map((signal, idx) => {
-          const [fg, bg] = sevColour[signal.severity] || ['#374151', '#e5e7eb'];
+          const [fg, bg] = sevColour[signal.severity] || ["#374151", "#e5e7eb"];
           return (
             <details key={idx} className="risk-row">
               <summary>
-                <span className="risk-sev-chip" style={{ color: fg, background: bg }}>{signal.severity.toUpperCase()}</span>
+                <span
+                  className="risk-sev-chip"
+                  style={{ color: fg, background: bg }}
+                >
+                  {signal.severity.toUpperCase()}
+                </span>
                 <strong>{signal.title}</strong>
-                <span className="muted">{signal.affected_bidders.join(', ')}</span>
+                <span className="muted">
+                  {signal.affected_bidders.join(", ")}
+                </span>
               </summary>
               <div className="risk-detail">
                 <p>{signal.description}</p>
-                <p className="muted" style={{ marginTop: 6 }}>Evidence: {signal.evidence}</p>
+                <p className="muted" style={{ marginTop: 6 }}>
+                  Evidence: {signal.evidence}
+                </p>
               </div>
             </details>
           );
@@ -431,11 +631,16 @@ function AwardView({ award, result }) {
       <div className="panel-head">
         <div>
           <h2>Award Contract</h2>
-          <p>Select winning bidder, issue purchase order / contract, and preserve rejection reasons.</p>
+          <p>
+            Select winning bidder, issue purchase order / contract, and preserve
+            rejection reasons.
+          </p>
         </div>
       </div>
       {!result ? (
-        <div className="empty">Run bid evaluation before award recommendation.</div>
+        <div className="empty">
+          Run bid evaluation before award recommendation.
+        </div>
       ) : (
         <div className="award-grid">
           <article>
@@ -445,8 +650,12 @@ function AwardView({ award, result }) {
           </article>
           <article>
             <span className="label">Winning bidder</span>
-            <strong>{award.winner || 'Not ready'}</strong>
-            <p>{award.winner ? `Eligible L1 bidder at ${award.price}.` : 'Manual review must be resolved before award.'}</p>
+            <strong>{award.winner || "Not ready"}</strong>
+            <p>
+              {award.winner
+                ? `Eligible L1 bidder at ${award.price}.`
+                : "Manual review must be resolved before award."}
+            </p>
           </article>
         </div>
       )}
@@ -456,142 +665,117 @@ function AwardView({ award, result }) {
 }
 
 function ReportView({ report, result }) {
-  const [mode, setMode] = useState('rendered');
-  const renderedHtml = report ? marked.parse(report) : '';
+  const [mode, setMode] = useState("rendered");
+  const renderedHtml = report ? marked.parse(report) : "";
   return (
     <section className="panel">
       <div className="panel-head">
         <div>
           <h2>Consolidated Report</h2>
-          <p>Every decision includes the criterion, source document, extracted value, and reason.</p>
+          <p>
+            Every decision includes the criterion, source document, extracted
+            value, and reason.
+          </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
           {result && (
             <div className="report-links">
-              <a href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/evaluation_report.md`} target="_blank"><Download size={16} /> Markdown</a>
-              <a href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/evaluation_report.json`} target="_blank"><Download size={16} /> JSON</a>
-              <a href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/agent_outputs.json`} target="_blank"><Download size={16} /> Agent Outputs</a>
-              <a href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/audit_log.jsonl`} target="_blank"><Download size={16} /> Audit</a>
+              <a
+                href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/evaluation_report.md`}
+                target="_blank"
+              >
+                <Download size={16} /> Markdown
+              </a>
+              <a
+                href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/evaluation_report.json`}
+                target="_blank"
+              >
+                <Download size={16} /> JSON
+              </a>
+              <a
+                href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/agent_outputs.json`}
+                target="_blank"
+              >
+                <Download size={16} /> Agent Outputs
+              </a>
+              <a
+                href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/reports/audit_log.jsonl`}
+                target="_blank"
+              >
+                <Download size={16} /> Audit
+              </a>
             </div>
           )}
           <div className="report-mode-toggle">
-            <button className={mode === 'rendered' ? 'active' : ''} onClick={() => setMode('rendered')}>Preview</button>
-            <button className={mode === 'raw' ? 'active' : ''} onClick={() => setMode('raw')}>Raw</button>
+            <button
+              className={mode === "rendered" ? "active" : ""}
+              onClick={() => setMode("rendered")}
+            >
+              Preview
+            </button>
+            <button
+              className={mode === "raw" ? "active" : ""}
+              onClick={() => setMode("raw")}
+            >
+              Raw
+            </button>
           </div>
         </div>
       </div>
-      {!report && <div className="empty">Run an evaluation to preview the generated consolidated report.</div>}
-      {report && mode === 'rendered' && (
+      {!report && (
+        <div className="empty">
+          Run an evaluation to preview the generated consolidated report.
+        </div>
+      )}
+      {report && mode === "rendered" && (
         <div
           className="report-rendered"
           dangerouslySetInnerHTML={{ __html: renderedHtml }}
         />
       )}
-      {report && mode === 'raw' && (
+      {report && mode === "raw" && (
         <pre className="report-preview">{report}</pre>
       )}
     </section>
   );
 }
 
-function AmendmentsView({ corrigendum }) {
-  if (!corrigendum) {
-    return (
-      <section className="panel">
-        <h2>Tender Amendments (Corrigendum)</h2>
-        <div className="empty">Run an evaluation to check for criteria changes since the last run.</div>
-      </section>
-    );
-  }
-  if (!corrigendum.has_changes) {
-    return (
-      <section className="panel">
-        <h2>Tender Amendments (Corrigendum)</h2>
-        <div className="empty">{corrigendum.message || 'No criteria changes detected. Tender is unchanged since last evaluation.'}</div>
-      </section>
-    );
-  }
-  const { added = [], removed = [], modified = [], affected_bidders = [], requires_full_reeval, summary, detected_at } = corrigendum;
-  return (
-    <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h2>Tender Amendments (Corrigendum)</h2>
-          <p>Changes detected between the previous and current evaluation run.</p>
-        </div>
-        {requires_full_reeval && (
-          <span className="status fail" style={{ alignSelf: 'center' }}>Re-evaluation required</span>
-        )}
-      </div>
-      <div className="corrigendum-summary">
-        <AlertTriangle size={16} />
-        <span>{summary}</span>
-        {detected_at && <span className="muted" style={{ marginLeft: 'auto', fontSize: '0.78rem' }}>{new Date(detected_at).toLocaleString()}</span>}
-      </div>
-      {added.length > 0 && (
-        <div className="corrigendum-section">
-          <h3><span className="status pass">Added ({added.length})</span></h3>
-          <table className="corrigendum-table">
-            <thead><tr><th>ID</th><th>Description</th></tr></thead>
-            <tbody>{added.map((c) => (
-              <tr key={c.criterion_id}><td><code>{c.criterion_id}</code></td><td>{c.description}</td></tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
-      {removed.length > 0 && (
-        <div className="corrigendum-section">
-          <h3><span className="status fail">Removed ({removed.length})</span></h3>
-          <table className="corrigendum-table">
-            <thead><tr><th>ID</th><th>Description</th></tr></thead>
-            <tbody>{removed.map((c) => (
-              <tr key={c.criterion_id}><td><code>{c.criterion_id}</code></td><td>{c.description}</td></tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
-      {modified.length > 0 && (
-        <div className="corrigendum-section">
-          <h3><span className="status review">Modified ({modified.length})</span></h3>
-          <table className="corrigendum-table">
-            <thead><tr><th>ID</th><th>Field</th><th>Previous</th><th>Current</th></tr></thead>
-            <tbody>{modified.map((c, i) => (
-              <tr key={`${c.criterion_id}-${i}`}>
-                <td><code>{c.criterion_id}</code></td>
-                <td>{c.field}</td>
-                <td className="corrigendum-old">{c.old_value}</td>
-                <td className="corrigendum-new">{c.new_value}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
-      {affected_bidders.length > 0 && (
-        <div className="corrigendum-section">
-          <h3>Affected Bidders</h3>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {affected_bidders.map((b) => <span key={b} className="status review">{b}</span>)}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
 function VendorDirectoryView({ vendors, workspace }) {
-  const [search, setSearch] = useState('');
-  const filtered = vendors.filter((v) =>
-    v.name.toLowerCase().includes(search.toLowerCase()) ||
-    (v.gstin || '').toLowerCase().includes(search.toLowerCase()) ||
-    (v.legal_name || '').toLowerCase().includes(search.toLowerCase())
+  const [search, setSearch] = useState("");
+  const filtered = vendors.filter(
+    (v) =>
+      v.name.toLowerCase().includes(search.toLowerCase()) ||
+      (v.gstin || "").toLowerCase().includes(search.toLowerCase()) ||
+      (v.legal_name || "").toLowerCase().includes(search.toLowerCase()),
   );
-  const gstinColour = { clear: 'pass', invalid: 'fail', flagged: 'fail', not_found: 'review' };
+  const gstinColour = {
+    clear: "pass",
+    invalid: "fail",
+    flagged: "fail",
+    not_found: "review",
+  };
   return (
     <section className="panel">
       <div className="panel-head">
         <div>
-          <h2><Users size={17} style={{ verticalAlign: 'middle', marginRight: 6 }} />Vendor Directory</h2>
-          <p className="muted">Verified supplier profiles with GSTIN status, certifications, and performance records from the latest evaluation.</p>
+          <h2>
+            <Users
+              size={17}
+              style={{ verticalAlign: "middle", marginRight: 6 }}
+            />
+            Vendor Directory
+          </h2>
+          <p className="muted">
+            Verified supplier profiles with GSTIN status, certifications, and
+            performance records from the latest evaluation.
+          </p>
         </div>
         <input
           className="dir-search"
@@ -600,69 +784,110 @@ function VendorDirectoryView({ vendors, workspace }) {
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
-      {!vendors.length
-        ? <div className="empty">Run an evaluation to populate the vendor directory.</div>
-        : (
-          <div className="vendor-dir-grid">
-            {filtered.map((v) => (
-              <article key={v.name} className={`vendor-card ${v.flagged ? 'vendor-flagged' : ''}`}>
-                <div className="vendor-card-head">
-                  <div>
-                    <strong>{v.name}</strong>
-                    {v.legal_name && v.legal_name !== v.name && (
-                      <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>{v.legal_name}</p>
-                    )}
-                  </div>
-                  <span className={`status ${v.overall_status === 'Eligible' ? 'pass' : v.overall_status === 'Not Eligible' ? 'fail' : 'review'}`}>
-                    {v.overall_status}
-                  </span>
-                </div>
-                <div className="vendor-meta">
-                  <span><strong>GSTIN:</strong> {v.gstin || '—'}</span>
-                  <span className={`status ${gstinColour[v.gstin_status] || 'neutral'}`} style={{ fontSize: 10 }}>
-                    {v.gstin_status.replace('_', ' ').toUpperCase()}
-                  </span>
-                </div>
-                <div className="vendor-criteria-bar">
-                  {v.total_criteria > 0 && (
-                    <>
-                      <span className="bar-pass" style={{ flex: v.criteria_passed }} title={`${v.criteria_passed} passed`} />
-                      <span className="bar-fail" style={{ flex: v.criteria_failed }} title={`${v.criteria_failed} failed`} />
-                      <span className="bar-review" style={{ flex: v.criteria_review }} title={`${v.criteria_review} review`} />
-                    </>
+      {!vendors.length ? (
+        <div className="empty">
+          Run an evaluation to populate the vendor directory.
+        </div>
+      ) : (
+        <div className="vendor-dir-grid">
+          {filtered.map((v) => (
+            <article
+              key={v.name}
+              className={`vendor-card ${v.flagged ? "vendor-flagged" : ""}`}
+            >
+              <div className="vendor-card-head">
+                <div>
+                  <strong>{v.name}</strong>
+                  {v.legal_name && v.legal_name !== v.name && (
+                    <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                      {v.legal_name}
+                    </p>
                   )}
                 </div>
-                <p style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>
-                  {v.criteria_passed} passed · {v.criteria_failed} failed · {v.criteria_review} review · {v.review_tasks} task{v.review_tasks !== 1 ? 's' : ''}
+                <span
+                  className={`status ${v.overall_status === "Eligible" ? "pass" : v.overall_status === "Not Eligible" ? "fail" : "review"}`}
+                >
+                  {v.overall_status}
+                </span>
+              </div>
+              <div className="vendor-meta">
+                <span>
+                  <strong>GSTIN:</strong> {v.gstin || "—"}
+                </span>
+                <span
+                  className={`status ${gstinColour[v.gstin_status] || "neutral"}`}
+                  style={{ fontSize: 10 }}
+                >
+                  {v.gstin_status.replace("_", " ").toUpperCase()}
+                </span>
+              </div>
+              <div className="vendor-criteria-bar">
+                {v.total_criteria > 0 && (
+                  <>
+                    <span
+                      className="bar-pass"
+                      style={{ flex: v.criteria_passed }}
+                      title={`${v.criteria_passed} passed`}
+                    />
+                    <span
+                      className="bar-fail"
+                      style={{ flex: v.criteria_failed }}
+                      title={`${v.criteria_failed} failed`}
+                    />
+                    <span
+                      className="bar-review"
+                      style={{ flex: v.criteria_review }}
+                      title={`${v.criteria_review} review`}
+                    />
+                  </>
+                )}
+              </div>
+              <p style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
+                {v.criteria_passed} passed · {v.criteria_failed} failed ·{" "}
+                {v.criteria_review} review · {v.review_tasks} task
+                {v.review_tasks !== 1 ? "s" : ""}
+              </p>
+              {v.flagged && (
+                <p className="vendor-flag-reason">
+                  <ShieldX size={12} /> {v.flag_reason}
                 </p>
-                {v.flagged && <p className="vendor-flag-reason"><ShieldX size={12} /> {v.flag_reason}</p>}
-              </article>
-            ))}
-          </div>
-        )}
+              )}
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
 
 function AuditTrailView({ events }) {
-  const [filter, setFilter] = useState('');
+  const [filter, setFilter] = useState("");
   const filtered = events.filter((e) => {
     if (!filter) return true;
     const q = filter.toLowerCase();
     return (
-      (e.step || '').toLowerCase().includes(q) ||
-      (e.subject || '').toLowerCase().includes(q) ||
-      JSON.stringify(e.detail || {}).toLowerCase().includes(q)
+      (e.step || "").toLowerCase().includes(q) ||
+      (e.subject || "").toLowerCase().includes(q) ||
+      JSON.stringify(e.detail || {})
+        .toLowerCase()
+        .includes(q)
     );
   });
   return (
     <section className="panel">
       <div className="panel-head">
         <div>
-          <h2><BookOpen size={17} style={{ verticalAlign: 'middle', marginRight: 6 }} />Audit Trail</h2>
+          <h2>
+            <BookOpen
+              size={17}
+              style={{ verticalAlign: "middle", marginRight: 6 }}
+            />
+            Audit Trail
+          </h2>
           <p className="muted">
-            Full immutable log of every action — document uploads, GSTIN checks, evidence extraction, verdicts, and persistence.
-            Demonstrates fairness, accountability, and compliance to all stakeholders.
+            Full immutable log of every action — document uploads, GSTIN checks,
+            evidence extraction, verdicts, and persistence. Demonstrates
+            fairness, accountability, and compliance to all stakeholders.
           </p>
         </div>
         <input
@@ -672,44 +897,62 @@ function AuditTrailView({ events }) {
           onChange={(e) => setFilter(e.target.value)}
         />
       </div>
-      {!events.length
-        ? <div className="empty">Run an evaluation to generate the audit trail.</div>
-        : (
-          <div className="audit-list">
-            {filtered.map((evt, idx) => (
-              <details key={idx} className="audit-row">
-                <summary>
-                  <Clock size={13} className="audit-icon" />
-                  <span className="audit-step">{evt.step || '—'}</span>
-                  <span className="audit-subject">{evt.subject || ''}</span>
-                </summary>
-                <pre className="audit-detail">{JSON.stringify(evt.detail || {}, null, 2)}</pre>
-              </details>
-            ))}
-            {filtered.length === 0 && <div className="empty">No events match the filter.</div>}
-          </div>
-        )}
+      {!events.length ? (
+        <div className="empty">
+          Run an evaluation to generate the audit trail.
+        </div>
+      ) : (
+        <div className="audit-list">
+          {filtered.map((evt, idx) => (
+            <details key={idx} className="audit-row">
+              <summary>
+                <Clock size={13} className="audit-icon" />
+                <span className="audit-step">{evt.step || "—"}</span>
+                <span className="audit-subject">{evt.subject || ""}</span>
+              </summary>
+              <pre className="audit-detail">
+                {JSON.stringify(evt.detail || {}, null, 2)}
+              </pre>
+            </details>
+          ))}
+          {filtered.length === 0 && (
+            <div className="empty">No events match the filter.</div>
+          )}
+        </div>
+      )}
     </section>
   );
 }
 
 function gstinRejected(bidder) {
   const s = bidder.gstin_check?.check_status;
-  return s === 'invalid' || s === 'flagged';
+  return s === "invalid" || s === "flagged";
 }
 
 function BidderTable({ result }) {
-  if (!result) return <div className="empty">Collect bidder documents, then run evaluation.</div>;
+  if (!result)
+    return (
+      <div className="empty">
+        Collect bidder documents, then run evaluation.
+      </div>
+    );
   return (
     <div className="bidder-list">
       {result.bidders.map((bidder) => {
         const rejected = gstinRejected(bidder);
         return (
-          <article className={`bidder-card${rejected ? ' gstin-rejected' : ''}`} key={bidder.bidder}>
+          <article
+            className={`bidder-card${rejected ? " gstin-rejected" : ""}`}
+            key={bidder.bidder}
+          >
             <div className="bidder-head">
               <h3>{bidder.bidder}</h3>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span className={`status ${statusClass(bidder.overall_status)}`}>{bidder.overall_status}</span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span
+                  className={`status ${statusClass(bidder.overall_status)}`}
+                >
+                  {bidder.overall_status}
+                </span>
                 <a
                   className="report-dl-btn"
                   href={`${API}/workspaces/${encodeURIComponent(result.tender_id)}/bidders/${encodeURIComponent(bidder.bidder)}/rejection-report`}
@@ -726,14 +969,30 @@ function BidderTable({ result }) {
               <div className="gstin-rejection-banner">
                 <ShieldX size={16} />
                 <span>
-                  {bidder.gstin_check.check_status === 'flagged'
-                    ? 'Vendor flagged — not permitted to bid'
-                    : 'Invalid GSTIN — bid rejected'}
+                  {bidder.gstin_check.check_status === "flagged"
+                    ? "Vendor flagged — not permitted to bid"
+                    : "Invalid GSTIN — bid rejected"}
                   {bidder.gstin_check.gstin && (
-                    <> &middot; GSTIN: <strong>{bidder.gstin_check.gstin}</strong></>
+                    <>
+                      {" "}
+                      &middot; GSTIN:{" "}
+                      <strong>{bidder.gstin_check.gstin}</strong>
+                    </>
                   )}
                 </span>
-                <p className="gstin-rejection-reason">{bidder.gstin_check.rejection_reason}</p>
+                <p className="gstin-rejection-reason">
+                  {bidder.gstin_check.rejection_reason}
+                </p>
+              </div>
+            )}
+
+            {bidder.gstin_check?.check_status === "no_gstin" && (
+              <div className="gstin-rejection-banner" style={{ background: "#fffbeb", borderColor: "#fde68a", color: "#92400e" }}>
+                <AlertTriangle size={16} style={{ color: "#d97706" }} />
+                <span>No GSTIN found — flagged for manual review (possible foreign bidder)</span>
+                <p className="gstin-rejection-reason" style={{ color: "#78350f" }}>
+                  {bidder.gstin_check.rejection_reason}
+                </p>
               </div>
             )}
 
@@ -743,38 +1002,29 @@ function BidderTable({ result }) {
                   <details className="verdict-row" key={verdict.criterion_id}>
                     <summary>
                       <strong>{verdict.criterion_id}</strong>
-                      <span className={`status ${statusClass(verdict.status)}`}>{verdict.status}</span>
-                      <span className="verdict-value">{verdict.extracted_value || 'No value'}</span>
-                      <span className="verdict-reason">{verdict.reason}</span>
+                      <span className={`status ${statusClass(verdict.status)}`}>
+                        {verdict.status}
+                      </span>
+                      <span>{verdict.extracted_value || "No value"}</span>
+                      <p>{verdict.reason}</p>
                     </summary>
                     <div className="explanation">
-                      <div className="expl-row">
-                        <span className="expl-label">Criterion</span>
-                        <span className="expl-value">{verdict.criterion}</span>
-                      </div>
-                      <div className="expl-row">
-                        <span className="expl-label">Tender source</span>
-                        <CitationBlock source={verdict.tender_source} />
-                      </div>
-                      <div className="expl-row">
-                        <span className="expl-label">Bidder source</span>
-                        <CitationBlock source={verdict.bidder_source} />
-                      </div>
-                      <div className="expl-row">
-                        <span className="expl-label">Rule trace</span>
-                        <RuleTrace trace={verdict.rule_trace} />
-                      </div>
+                      <p>
+                        <b>Criterion:</b> {verdict.criterion}
+                      </p>
+                      <p>
+                        <b>Tender source:</b> {citation(verdict.tender_source)}
+                      </p>
+                      <p>
+                        <b>Bidder source:</b> {citation(verdict.bidder_source)}
+                      </p>
+                      <p>
+                        <b>Rule trace:</b> {verdict.rule_trace}
+                      </p>
                       {verdict.manual_review_reason && (
-                        <div className="expl-row">
-                          <span className="expl-label">Review reason</span>
-                          <span className="expl-value">{verdict.manual_review_reason}</span>
-                        </div>
-                      )}
-                      {verdict.suggested_action && (
-                        <div className="expl-row expl-row-action">
-                          <span className="expl-label">Action</span>
-                          <span className="expl-value">{verdict.suggested_action}</span>
-                        </div>
+                        <p>
+                          <b>Manual review:</b> {verdict.manual_review_reason}
+                        </p>
                       )}
                     </div>
                   </details>
@@ -785,7 +1035,9 @@ function BidderTable({ result }) {
             {!rejected && bidder.review_tasks?.length > 0 && (
               <div className="review-list">
                 {bidder.review_tasks.map((task) => (
-                  <p key={`${task.task_id}-${task.reason}`}><AlertTriangle size={15} /> {task.reason}</p>
+                  <p key={`${task.task_id}-${task.reason}`}>
+                    <AlertTriangle size={15} /> {task.reason}
+                  </p>
                 ))}
               </div>
             )}
@@ -796,55 +1048,31 @@ function BidderTable({ result }) {
   );
 }
 
-function CitationBlock({ source }) {
-  if (!source?.document) return <span className="expl-value muted">No source document</span>;
-  return (
-    <div className="citation-block">
-      <div className="citation-meta">
-        <span className="citation-doc-name"><FileText size={11} /> {source.document}</span>
-        {source.page > 0 && <span className="citation-page">p.{source.page}</span>}
-        {source.section && <span className="citation-section" title={source.section}>{source.section}</span>}
-      </div>
-      {source.excerpt && (
-        <blockquote className="citation-excerpt">{source.excerpt}</blockquote>
-      )}
-    </div>
-  );
-}
-
-function RuleTrace({ trace }) {
-  if (!trace) return <span className="expl-value muted">—</span>;
-  const parts = trace.split(';').map((p) => p.trim()).filter(Boolean);
-  return (
-    <div className="rule-trace-chips">
-      {parts.map((part, i) => {
-        const eq = part.indexOf('=');
-        if (eq < 0) return <span key={i} className="rule-kv"><span className="rule-kv-val">{part}</span></span>;
-        const key = part.slice(0, eq).trim();
-        const val = part.slice(eq + 1).trim();
-        return (
-          <span key={i} className="rule-kv">
-            <span className="rule-kv-key">{key}</span>
-            <span className="rule-kv-val" title={val}>{val}</span>
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
 function StepList({ steps }) {
-  if (!steps.length) return <div className="empty">Create a workspace or upload documents to populate this workflow.</div>;
+  if (!steps.length)
+    return (
+      <div className="empty">
+        Create a workspace or upload documents to populate this workflow.
+      </div>
+    );
   return (
     <div className="step-list">
       {steps.map((step) => (
         <article className="step-card" key={step.step}>
           <div>
             <h3>{step.step}</h3>
-            <span className={`status ${step.status === 'ready' ? 'pass' : step.status === 'blocked' ? 'fail' : 'review'}`}>{step.status}</span>
+            <span
+              className={`status ${step.status === "ready" ? "pass" : step.status === "blocked" ? "fail" : "review"}`}
+            >
+              {step.status}
+            </span>
           </div>
           <Checklist items={step.items || []} />
-          {step.evidence?.length > 0 && <p className="muted">Evidence/files: {formatEvidence(step.evidence)}</p>}
+          {step.evidence?.length > 0 && (
+            <p className="muted">
+              Evidence/files: {formatEvidence(step.evidence)}
+            </p>
+          )}
         </article>
       ))}
     </div>
@@ -854,20 +1082,25 @@ function StepList({ steps }) {
 function Checklist({ items }) {
   return (
     <ul className="checklist">
-      {items.map((item) => <li key={item}><CheckCircle2 size={15} /> {item}</li>)}
+      {items.map((item) => (
+        <li key={item}>
+          <CheckCircle2 size={15} /> {item}
+        </li>
+      ))}
     </ul>
   );
 }
 
 function VendorSubmissionList({ submissions }) {
-  if (!submissions.length) return <div className="empty">No bidder submissions collected yet.</div>;
+  if (!submissions.length)
+    return <div className="empty">No bidder submissions collected yet.</div>;
   return (
     <div className="submission-list">
       {submissions.map((submission) => (
         <article key={submission.vendor}>
           <h3>{submission.vendor}</h3>
           <p>{submission.documents.length} document(s)</p>
-          <span>{submission.documents.join(', ')}</span>
+          <span>{submission.documents.join(", ")}</span>
         </article>
       ))}
     </div>
@@ -881,7 +1114,8 @@ function SelectionReasons({ result }) {
       <h3>Selection / Rejection Reasons</h3>
       {reasons.map((item) => (
         <p key={item.bidder}>
-          <b>{item.bidder}</b> - {item.decision}: {item.reason} {item.source && <>Source: {item.source}</>}
+          <b>{item.bidder}</b> - {item.decision}: {item.reason}{" "}
+          {item.source && <>Source: {item.source}</>}
         </p>
       ))}
     </div>
@@ -899,13 +1133,17 @@ function Metric({ icon, label, value }) {
 }
 
 function StatusPill({ message, busy }) {
-  return <div className={`status-pill ${busy ? 'busy' : ''}`}>{busy && <RefreshCw size={16} />} {message}</div>;
+  return (
+    <div className={`status-pill ${busy ? "busy" : ""}`}>
+      {busy && <RefreshCw size={16} />} {message}
+    </div>
+  );
 }
 
 async function uploadFiles(url, files) {
   const body = new FormData();
-  Array.from(files).forEach((file) => body.append('files', file));
-  return request(url, { method: 'POST', body });
+  Array.from(files).forEach((file) => body.append("files", file));
+  return request(url, { method: "POST", body });
 }
 
 async function request(url, options = {}) {
@@ -924,34 +1162,65 @@ async function request(url, options = {}) {
 }
 
 function summarize(result) {
-  if (!result) return { bidders: 0, eligible: 0, review: 0, finalGate: 'Waiting' };
+  if (!result)
+    return { bidders: 0, eligible: 0, review: 0, finalGate: "Waiting" };
   return {
     bidders: result.bidders.length,
-    eligible: result.bidders.filter((item) => item.overall_status === 'Eligible').length,
-    review: result.bidders.filter((item) => item.overall_status === 'Need Manual Review').length,
-    finalGate: result.final_accuracy_gate_passed ? 'Passed' : 'Failed',
+    eligible: result.bidders.filter(
+      (item) => item.overall_status === "Eligible",
+    ).length,
+    review: result.bidders.filter(
+      (item) => item.overall_status === "Need Manual Review",
+    ).length,
+    finalGate: result.final_accuracy_gate_passed ? "Passed" : "Failed",
   };
 }
 
 function awardRecommendation(result) {
-  if (!result) return { action: 'Evaluation pending', winner: '', reason: 'Run evaluation before award.', price: '' };
-  const reviewCount = result.bidders.filter((bidder) => bidder.overall_status === 'Need Manual Review').length;
+  if (!result)
+    return {
+      action: "Evaluation pending",
+      winner: "",
+      reason: "Run evaluation before award.",
+      price: "",
+    };
+  const reviewCount = result.bidders.filter(
+    (bidder) => bidder.overall_status === "Need Manual Review",
+  ).length;
   if (reviewCount > 0) {
-    return { action: 'Hold award', winner: '', reason: `${reviewCount} bidder(s) require manual review before award.`, price: '' };
+    return {
+      action: "Hold award",
+      winner: "",
+      reason: `${reviewCount} bidder(s) require manual review before award.`,
+      price: "",
+    };
   }
   const eligible = result.bidders
-    .filter((bidder) => bidder.overall_status === 'Eligible')
+    .filter((bidder) => bidder.overall_status === "Eligible")
     .map((bidder) => ({ bidder, price: bidderPrice(bidder) }))
     .filter((item) => item.price !== null)
     .sort((a, b) => a.price - b.price);
-  if (!eligible.length) return { action: 'Do not award', winner: '', reason: 'No eligible bidder has a normalized quoted price for L1 comparison.', price: '' };
+  if (!eligible.length)
+    return {
+      action: "Do not award",
+      winner: "",
+      reason:
+        "No eligible bidder has a normalized quoted price for L1 comparison.",
+      price: "",
+    };
   const l1 = eligible[0];
-  return { action: 'Proceed to award', winner: l1.bidder.bidder, reason: 'Eligible L1 bidder found; issue purchase order after officer approval.', price: formatInr(l1.price) };
+  return {
+    action: "Proceed to award",
+    winner: l1.bidder.bidder,
+    reason:
+      "Eligible L1 bidder found; issue purchase order after officer approval.",
+    price: formatInr(l1.price),
+  };
 }
 
 function selectionReasons(result) {
   const pricedEligible = result.bidders
-    .filter((bidder) => bidder.overall_status === 'Eligible')
+    .filter((bidder) => bidder.overall_status === "Eligible")
     .map((bidder) => ({ bidder, price: bidderPrice(bidder) }))
     .filter((item) => item.price !== null)
     .sort((a, b) => a.price - b.price);
@@ -961,81 +1230,244 @@ function selectionReasons(result) {
     if (l1 && bidder.bidder === l1.bidder.bidder) {
       return {
         bidder: bidder.bidder,
-        decision: 'Selected for award recommendation',
+        decision: "Selected for award recommendation",
         reason: `eligible and lowest extracted quote (${formatInr(price)})`,
         source: priceSource(bidder),
       };
     }
-    if (bidder.overall_status === 'Eligible') {
+    if (bidder.overall_status === "Eligible") {
       return {
         bidder: bidder.bidder,
-        decision: 'Not selected',
-        reason: `eligible, but quoted price ${formatInr(price)} is higher than L1 ${formatInr(l1?.price)} from ${l1?.bidder.bidder || 'another bidder'}`,
+        decision: "Not selected",
+        reason: `eligible, but quoted price ${formatInr(price)} is higher than L1 ${formatInr(l1?.price)} from ${l1?.bidder.bidder || "another bidder"}`,
         source: priceSource(bidder),
       };
     }
-    const failed = bidder.verdicts.filter((verdict) => verdict.status === 'FAIL');
+    const failed = bidder.verdicts.filter(
+      (verdict) => verdict.status === "FAIL",
+    );
     if (failed.length) {
       return {
         bidder: bidder.bidder,
-        decision: 'Rejected / Not eligible',
-        reason: failed.map((verdict) => `${verdict.criterion_id}: ${verdict.reason}`).join('; '),
-        source: failed.map((verdict) => citation(verdict.bidder_source)).join('; '),
+        decision: "Rejected / Not eligible",
+        reason: failed
+          .map((verdict) => `${verdict.criterion_id}: ${verdict.reason}`)
+          .join("; "),
+        source: failed
+          .map((verdict) => citation(verdict.bidder_source))
+          .join("; "),
       };
     }
-    const reviews = bidder.verdicts.filter((verdict) => verdict.status === 'NEED_MANUAL_REVIEW');
+    const reviews = bidder.verdicts.filter(
+      (verdict) => verdict.status === "NEED_MANUAL_REVIEW",
+    );
     return {
       bidder: bidder.bidder,
-      decision: 'Hold for manual review',
-      reason: reviews.map((verdict) => `${verdict.criterion_id}: ${verdict.manual_review_reason || verdict.reason}`).join('; ') || 'Manual review is required before award.',
-      source: reviews.map((verdict) => citation(verdict.bidder_source)).join('; '),
+      decision: "Hold for manual review",
+      reason:
+        reviews
+          .map(
+            (verdict) =>
+              `${verdict.criterion_id}: ${verdict.manual_review_reason || verdict.reason}`,
+          )
+          .join("; ") || "Manual review is required before award.",
+      source: reviews
+        .map((verdict) => citation(verdict.bidder_source))
+        .join("; "),
     };
   });
 }
 
 function bidderPrice(bidder) {
-  const verdict = bidder.verdicts.find((item) => item.criterion_id === 'C7' || item.criterion?.toLowerCase().includes('quoted financial bid'));
-  return moneyToRupees(verdict?.extracted_value || '');
+  const verdict = bidder.verdicts.find(
+    (item) =>
+      item.criterion_id === "C7" ||
+      item.criterion?.toLowerCase().includes("quoted financial bid"),
+  );
+  return moneyToRupees(verdict?.extracted_value || "");
 }
 
 function priceSource(bidder) {
-  const verdict = bidder.verdicts.find((item) => item.criterion_id === 'C7' || item.criterion?.toLowerCase().includes('quoted financial bid'));
-  return verdict ? citation(verdict.bidder_source) : 'No price source document';
+  const verdict = bidder.verdicts.find(
+    (item) =>
+      item.criterion_id === "C7" ||
+      item.criterion?.toLowerCase().includes("quoted financial bid"),
+  );
+  return verdict ? citation(verdict.bidder_source) : "No price source document";
 }
 
 function moneyToRupees(value) {
-  const match = String(value).match(/([0-9][0-9,]*(?:\.[0-9]+)?)\s*(crore|cr|lakh)?/i);
+  const match = String(value).match(
+    /([0-9][0-9,]*(?:\.[0-9]+)?)\s*(crore|cr|lakh)?/i,
+  );
   if (!match) return null;
-  const amount = Number(match[1].replaceAll(',', ''));
-  const unit = (match[2] || '').toLowerCase();
-  if (unit === 'crore' || unit === 'cr') return amount * 10000000;
-  if (unit === 'lakh') return amount * 100000;
+  const amount = Number(match[1].replaceAll(",", ""));
+  const unit = (match[2] || "").toLowerCase();
+  if (unit === "crore" || unit === "cr") return amount * 10000000;
+  if (unit === "lakh") return amount * 100000;
   return amount;
 }
 
 function formatInr(value) {
-  if (value === null || value === undefined) return 'not extracted';
-  return `INR ${Math.round(value).toLocaleString('en-IN')}`;
+  if (value === null || value === undefined) return "not extracted";
+  return `INR ${Math.round(value).toLocaleString("en-IN")}`;
 }
 
 function statusClass(value) {
   const text = String(value).toLowerCase();
-  if (text.includes('eligible') && !text.includes('not')) return 'pass';
-  if (text.includes('not') || text.includes('fail')) return 'fail';
-  if (text.includes('review') || text.includes('pending') || text.includes('blocked')) return 'review';
-  if (text.includes('pass') || text.includes('ready')) return 'pass';
-  return 'neutral';
+  if (text.includes("eligible") && !text.includes("not")) return "pass";
+  if (text.includes("not") || text.includes("fail")) return "fail";
+  if (
+    text.includes("review") ||
+    text.includes("pending") ||
+    text.includes("blocked")
+  )
+    return "review";
+  if (text.includes("pass") || text.includes("ready")) return "pass";
+  return "neutral";
 }
 
 function citation(source) {
-  if (!source?.document) return 'No source document';
+  if (!source?.document) return "No source document";
   return `${source.document}, page ${source.page}: ${source.excerpt}`;
 }
 
 function formatEvidence(evidence) {
-  if (!Array.isArray(evidence)) return '';
+  if (!Array.isArray(evidence)) return "";
   if (evidence.length > 4) return `${evidence.length} file(s)`;
-  return evidence.map((item) => typeof item === 'string' ? item : `${item.vendor} (${item.documents?.length || 0})`).join(', ');
+  return evidence
+    .map((item) =>
+      typeof item === "string"
+        ? item
+        : `${item.vendor} (${item.documents?.length || 0})`,
+    )
+    .join(", ");
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+function AmendmentsView({ corrigendum, workspace }) {
+  if (!corrigendum?.has_changes) {
+    return (
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>
+              <AlertTriangle size={17} style={{ verticalAlign: "middle", marginRight: 6 }} />
+              Tender Amendments
+            </h2>
+            <p className="muted">
+              Tracks changes to tender requirements between evaluation runs.
+            </p>
+          </div>
+        </div>
+        <div className="empty">
+          {corrigendum
+            ? corrigendum.message || "No criteria changes detected — tender requirements are unchanged from the previous evaluation."
+            : "No amendments detected yet. Run evaluation twice on the same workspace after modifying the tender documents to see corrigendum tracking in action."}
+        </div>
+      </section>
+    );
+  }
+
+  const total =
+    (corrigendum.added?.length || 0) +
+    (corrigendum.removed?.length || 0) +
+    (corrigendum.modified?.length || 0);
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>
+            <AlertTriangle size={17} style={{ verticalAlign: "middle", marginRight: 6 }} />
+            Tender Amendments
+          </h2>
+          <p className="muted">Detected at {corrigendum.detected_at?.slice(0, 19).replace("T", " ")} UTC</p>
+        </div>
+        {corrigendum.requires_full_reeval && (
+          <span className="status fail">Re-evaluation Required</span>
+        )}
+      </div>
+
+      <div className="corrigendum-summary">
+        <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+        <span>{corrigendum.summary}</span>
+      </div>
+
+      {corrigendum.added?.length > 0 && (
+        <div className="corrigendum-section">
+          <h3>
+            <span className="status pass" style={{ fontSize: 11 }}>+ {corrigendum.added.length} Added</span>
+          </h3>
+          <table className="corrigendum-table">
+            <thead>
+              <tr><th>Criterion ID</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              {corrigendum.added.map((c) => (
+                <tr key={c.criterion_id}>
+                  <td><code>{c.criterion_id}</code></td>
+                  <td>{c.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {corrigendum.removed?.length > 0 && (
+        <div className="corrigendum-section">
+          <h3>
+            <span className="status fail" style={{ fontSize: 11 }}>− {corrigendum.removed.length} Removed</span>
+          </h3>
+          <table className="corrigendum-table">
+            <thead>
+              <tr><th>Criterion ID</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              {corrigendum.removed.map((c) => (
+                <tr key={c.criterion_id}>
+                  <td><code>{c.criterion_id}</code></td>
+                  <td className="corrigendum-old">{c.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {corrigendum.modified?.length > 0 && (
+        <div className="corrigendum-section">
+          <h3>
+            <span className="status review" style={{ fontSize: 11 }}>~ {corrigendum.modified.length} Modified</span>
+          </h3>
+          <table className="corrigendum-table">
+            <thead>
+              <tr><th>Criterion ID</th><th>Field Changed</th><th>Before</th><th>After</th></tr>
+            </thead>
+            <tbody>
+              {corrigendum.modified.map((c, idx) => (
+                <tr key={`${c.criterion_id}-${idx}`}>
+                  <td><code>{c.criterion_id}</code></td>
+                  <td>{c.field}</td>
+                  <td><span className="corrigendum-old">{c.old_value || "—"}</span></td>
+                  <td><span className="corrigendum-new">{c.new_value || "—"}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {corrigendum.affected_bidders?.length > 0 && (
+        <div className="corrigendum-section">
+          <h3>Affected Bidders</h3>
+          <p style={{ color: "#4b5563", fontSize: 13 }}>
+            {corrigendum.affected_bidders.join(", ")}
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+createRoot(document.getElementById("root")).render(<App />);
