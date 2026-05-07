@@ -343,20 +343,9 @@ h3 {
   display: none;
 }
 
-.verdict-row p,
-.explanation p {
+.verdict-row p {
   margin: 0;
   color: #4b5563;
-}
-
-.explanation {
-  display: grid;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 12px;
-  background: #fff;
-  border: 1px solid #e0e6ef;
-  border-radius: 6px;
 }
 
 .review-list {
@@ -1017,4 +1006,166 @@ h3 {
 
 .checklist-export-btn:hover {
   background: #0d6360;
+}
+
+/* ── Verdict summary row ─────────────────────────────────────────────────── */
+
+.verdict-value {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 13px;
+}
+
+.verdict-reason {
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* ── Verdict explanation panel ───────────────────────────────────────────── */
+
+.explanation {
+  display: grid;
+  gap: 0;
+  margin-top: 12px;
+  background: #fff;
+  border: 1px solid #e0e6ef;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.expl-row {
+  display: grid;
+  grid-template-columns: 108px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f4f8;
+  font-size: 13px;
+}
+
+.expl-row:last-child {
+  border-bottom: none;
+}
+
+.expl-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding-top: 3px;
+  flex: 0 0 auto;
+}
+
+.expl-value {
+  color: #1f2937;
+  line-height: 1.6;
+}
+
+.expl-row-action {
+  background: #fffbeb;
+}
+
+.expl-row-action .expl-label {
+  color: #b45309;
+}
+
+.expl-row-action .expl-value {
+  color: #92400e;
+  font-size: 12.5px;
+}
+
+/* ── Citation block ──────────────────────────────────────────────────────── */
+
+.citation-block {
+  display: grid;
+  gap: 7px;
+}
+
+.citation-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.citation-doc-name {
+  font-weight: 700;
+  color: #1e3a5f;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.citation-page {
+  background: #e0e7ff;
+  color: #3730a3;
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.citation-section {
+  color: #6b7280;
+  font-size: 11px;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+}
+
+.citation-excerpt {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 0 6px 6px 0;
+  color: #4b5563;
+  font-size: 12px;
+  line-height: 1.65;
+  font-style: italic;
+  max-height: 110px;
+  overflow-y: auto;
+}
+
+/* ── Rule trace chips ────────────────────────────────────────────────────── */
+
+.rule-trace-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.rule-kv {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  font-size: 11.5px;
+  max-width: 320px;
+}
+
+.rule-kv-key {
+  background: #1e3a5f;
+  color: #c7d8f0;
+  padding: 3px 8px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.rule-kv-val {
+  background: #f1f5f9;
+  color: #1f2937;
+  padding: 3px 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

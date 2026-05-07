@@ -744,15 +744,38 @@ function BidderTable({ result }) {
                     <summary>
                       <strong>{verdict.criterion_id}</strong>
                       <span className={`status ${statusClass(verdict.status)}`}>{verdict.status}</span>
-                      <span>{verdict.extracted_value || 'No value'}</span>
-                      <p>{verdict.reason}</p>
+                      <span className="verdict-value">{verdict.extracted_value || 'No value'}</span>
+                      <span className="verdict-reason">{verdict.reason}</span>
                     </summary>
                     <div className="explanation">
-                      <p><b>Criterion:</b> {verdict.criterion}</p>
-                      <p><b>Tender source:</b> {citation(verdict.tender_source)}</p>
-                      <p><b>Bidder source:</b> {citation(verdict.bidder_source)}</p>
-                      <p><b>Rule trace:</b> {verdict.rule_trace}</p>
-                      {verdict.manual_review_reason && <p><b>Manual review:</b> {verdict.manual_review_reason}</p>}
+                      <div className="expl-row">
+                        <span className="expl-label">Criterion</span>
+                        <span className="expl-value">{verdict.criterion}</span>
+                      </div>
+                      <div className="expl-row">
+                        <span className="expl-label">Tender source</span>
+                        <CitationBlock source={verdict.tender_source} />
+                      </div>
+                      <div className="expl-row">
+                        <span className="expl-label">Bidder source</span>
+                        <CitationBlock source={verdict.bidder_source} />
+                      </div>
+                      <div className="expl-row">
+                        <span className="expl-label">Rule trace</span>
+                        <RuleTrace trace={verdict.rule_trace} />
+                      </div>
+                      {verdict.manual_review_reason && (
+                        <div className="expl-row">
+                          <span className="expl-label">Review reason</span>
+                          <span className="expl-value">{verdict.manual_review_reason}</span>
+                        </div>
+                      )}
+                      {verdict.suggested_action && (
+                        <div className="expl-row expl-row-action">
+                          <span className="expl-label">Action</span>
+                          <span className="expl-value">{verdict.suggested_action}</span>
+                        </div>
+                      )}
                     </div>
                   </details>
                 ))}
@@ -767,6 +790,43 @@ function BidderTable({ result }) {
               </div>
             )}
           </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function CitationBlock({ source }) {
+  if (!source?.document) return <span className="expl-value muted">No source document</span>;
+  return (
+    <div className="citation-block">
+      <div className="citation-meta">
+        <span className="citation-doc-name"><FileText size={11} /> {source.document}</span>
+        {source.page > 0 && <span className="citation-page">p.{source.page}</span>}
+        {source.section && <span className="citation-section" title={source.section}>{source.section}</span>}
+      </div>
+      {source.excerpt && (
+        <blockquote className="citation-excerpt">{source.excerpt}</blockquote>
+      )}
+    </div>
+  );
+}
+
+function RuleTrace({ trace }) {
+  if (!trace) return <span className="expl-value muted">—</span>;
+  const parts = trace.split(';').map((p) => p.trim()).filter(Boolean);
+  return (
+    <div className="rule-trace-chips">
+      {parts.map((part, i) => {
+        const eq = part.indexOf('=');
+        if (eq < 0) return <span key={i} className="rule-kv"><span className="rule-kv-val">{part}</span></span>;
+        const key = part.slice(0, eq).trim();
+        const val = part.slice(eq + 1).trim();
+        return (
+          <span key={i} className="rule-kv">
+            <span className="rule-kv-key">{key}</span>
+            <span className="rule-kv-val" title={val}>{val}</span>
+          </span>
         );
       })}
     </div>
